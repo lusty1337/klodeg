@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <!-- maximum-scale=1: iOS не увеличивает страницу при касании поля; щипком масштабировать по-прежнему можно -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#faf9f5" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1f1e1d" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Клодег">
+  <title>Клодег</title>
+  <link id="favicon" rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23D97757' d='m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400..600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="vendor/katex/katex.min.css">
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    // тема и бренд до первой отрисовки, чтобы интерфейс не мигал
+    try {
+      const t = localStorage.getItem("nh_theme");
+      if (t) document.documentElement.dataset.theme = t;
+      const q = new URLSearchParams(location.search).get("brand");
+      const isLocal = /^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(location.hostname) || !location.hostname;
+      const saved = localStorage.getItem("nh_brand");
+      const brand = (q === "neurohub" || q === "klodeg") ? q : (saved || (isLocal ? "neurohub" : "klodeg"));
+      document.documentElement.dataset.brand = brand;
+    } catch {}
+  </script>
+  <script src="config.js"></script>
+  <script src="vendor/marked.min.js"></script>
+  <script src="vendor/purify.min.js"></script>
+  <script src="vendor/katex/katex.min.js"></script>
+  <script src="vendor/highlight.min.js"></script>
+</head>
+<body>
+  <!-- Вход / первый запуск -->
+  <section id="auth" class="auth hidden">
+    <form id="auth-form" class="auth-card" autocomplete="on">
+      <div class="auth-brand">
+        <div class="logo big" data-brand-logo aria-hidden="true"></div>
+        <h1 class="auth-title" data-brand-name>Клодег</h1>
+      </div>
+      <p id="auth-hint" class="muted">Войдите в аккаунт Antonchik</p>
+      <label class="field">Логин<input name="username" required minlength="2" maxlength="32" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+      <label class="field">Пароль<input name="password" type="password" required minlength="4" autocomplete="current-password"></label>
+      <button class="btn primary block" type="submit" id="auth-submit">Войти</button>
+      <p id="auth-error" class="form-error" role="alert"></p>
+      <div id="auth-offline" class="offline-box hidden">
+        <p class="hint">Сервер сейчас выключен или недоступен. Попробуйте чуть позже.</p>
+        <button class="btn block" type="button" id="auth-retry">Проверить снова</button>
+      </div>
+      <p class="auth-legal only-klodeg">Продолжая, вы соглашаетесь с <button type="button" class="link-btn" id="auth-tos-link">Условиями использования</button> Antonchik.</p>
+    </form>
+  </section>
+
+  <!-- Экран приостановки аккаунта в стиле Claude -->
+  <section id="ban-screen" class="ban-screen hidden" aria-live="polite">
+    <div class="ban-wrap">
+      <div class="ban-brand">
+        <span class="ban-mark" data-claude-mark aria-hidden="true"></span>
+        <span class="ban-wordmark">Клодег</span>
+      </div>
+
+      <h1 class="ban-title" id="ban-title">Ваш аккаунт приостановлен</h1>
+
+      <div class="ban-lock" aria-hidden="true">
+        <svg width="64" height="68" viewBox="0 0 64 68" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20.5 30V20.5C20.5 13.5 25.5 8.5 32 8.5C38.6 8.5 43.5 13.4 43.5 20.5V30"/>
+          <path d="M25 30V21C25 16.4 28 13.3 32 13.3C36.1 13.3 39 16.5 39 21V30"/>
+          <path d="M13 31.5C13 30.2 14.2 29.4 16 29.3C24 28.9 40 28.8 48 29.3C49.9 29.4 51 30.4 51 32C51.2 40.2 51.3 50.4 50.8 58.2C50.7 59.8 49.6 60.8 47.8 60.9C38.6 61.2 25.4 61.2 16.2 60.9C14.3 60.8 13.2 59.7 13.1 58C12.8 50.2 12.8 39.8 13 31.5Z"/>
+          <path d="M32 40C34.4 40 36 41.7 36 43.8C36 45.3 35.1 46.6 33.8 47.2L35 53.5H29L30.2 47.2C28.9 46.6 28 45.3 28 43.8C28 41.7 29.6 40 32 40Z"/>
+        </svg>
+      </div>
+
+      <!-- Состояние 1: приостановлен, апелляция ещё не отправлена -->
+      <div id="ban-state-suspended" class="ban-state">
+        <div class="ban-copy">
+          <p>Мы приостановили ваш аккаунт из-за необычной активности. Ваши чаты и данные в безопасности.</p>
+          <p>Если вы считаете, что аккаунт приостановлен по ошибке, вы можете запросить проверку аккаунта.</p>
+        </div>
+
+        <p class="ban-next-label">Что будет дальше:</p>
+        <ol class="ban-steps">
+          <li>
+            <span class="ban-step-num">1</span>
+            <div>
+              <strong>Запрос проверки</strong>
+              <p>Расскажите подробнее о том, что произошло.</p>
+            </div>
+          </li>
+          <li>
+            <span class="ban-step-num">2</span>
+            <div>
+              <strong>Мы проверим ваш аккаунт</strong>
+              <p>Сотрудник нашей команды рассмотрит ваш запрос вместе с активностью аккаунта.</p>
+            </div>
+          </li>
+          <li>
+            <span class="ban-step-num">3</span>
+            <div>
+              <strong>Мы сообщим вам результат</strong>
+              <p>Решение появится прямо здесь, на этой странице аккаунта.</p>
+            </div>
+          </li>
+        </ol>
+
+        <button class="btn ink block" type="button" id="btn-ban-appeal">Запросить проверку</button>
+      </div>
+
+      <!-- Состояние 1б: форма апелляции -->
+      <form id="ban-state-form" class="ban-state hidden">
+        <div class="ban-copy">
+          <p>Расскажите подробнее о том, что произошло и почему вы считаете приостановку ошибочной.</p>
+        </div>
+        <div class="ban-card">
+          <label class="field">Ваше обращение
+            <textarea id="ban-appeal-text" rows="5" minlength="5" maxlength="2000" required placeholder="Опишите ситуацию…"></textarea>
+          </label>
+          <p id="ban-appeal-error" class="form-error" role="alert"></p>
+        </div>
+        <div class="ban-form-actions">
+          <button class="btn ink block" type="submit" id="btn-ban-submit">Отправить запрос</button>
+          <button class="btn ghost block" type="button" id="btn-ban-cancel">Назад</button>
+        </div>
+      </form>
+
+      <!-- Состояние 2: запрос на проверке -->
+      <div id="ban-state-pending" class="ban-state hidden">
+        <div class="ban-copy">
+          <p>Мы получили ваш запрос на проверку. Сотрудник нашей команды рассмотрит обращение вместе с активностью аккаунта.</p>
+        </div>
+        <div class="ban-card">
+          <div class="ban-card-head">
+            <span class="label">Ваш запрос</span>
+            <span class="status-tag warn">На проверке</span>
+          </div>
+          <p id="ban-pending-text" class="ban-quote"></p>
+          <p id="ban-pending-time" class="hint"></p>
+        </div>
+        <button class="btn block" type="button" id="btn-ban-refresh">Проверить статус</button>
+      </div>
+
+      <!-- Состояние 3: окончательный отказ -->
+      <div id="ban-state-closed" class="ban-state hidden">
+        <div class="ban-copy">
+          <p>Мы внимательно проверили ваш запрос и решили, что не будем возвращать доступ к аккаунту.</p>
+        </div>
+      </div>
+
+      <button class="ban-logout" type="button" id="btn-ban-logout">Выйти</button>
+
+      <p class="ban-legal">
+        Чтобы узнать больше об использовании Клодега, ознакомьтесь с нашими
+        <button type="button" class="link-btn" id="ban-tos-link">Условиями использования</button>.
+      </p>
+    </div>
+  </section>
+
+  <div id="app" class="app hidden">
+    <div id="scrim" class="scrim"></div>
+
+    <!-- Боковая панель. На телефоне выезжает слева -->
+    <aside class="sidebar" id="sidebar" aria-label="Навигация">
+      <div class="side-head">
+        <div class="brand">
+          <div class="logo" data-brand-logo aria-hidden="true"></div>
+          <span data-brand-name>Клодег</span>
+        </div>
+        <button class="icon-btn only-mobile" id="btn-close-sidebar" aria-label="Закрыть меню"><span data-icon="close"></span></button>
+      </div>
+
+      <nav class="modes" aria-label="Режимы">
+        <button class="mode-btn" data-mode="chat"><span data-icon="chat" data-size="20"></span><span>Чат</span></button>
+        <button class="mode-btn" data-mode="image" data-perm="image"><span data-icon="image" data-size="20"></span><span>Картинки</span></button>
+        <button class="mode-btn" data-mode="voice" data-perm="voice"><span data-icon="phone" data-size="20"></span><span>Звонок</span></button>
+        <button class="mode-btn" data-mode="agents"><span data-icon="users" data-size="20"></span><span>Агенты</span></button>
+        <button class="mode-btn" data-mode="yolo" data-perm="yolo"><span data-icon="eye" data-size="20"></span><span>Зрение</span></button>
+        <button class="mode-btn" data-mode="admin" data-admin><span data-icon="shield" data-size="20"></span><span>Админка</span><span class="nav-badge hidden" id="admin-appeals-badge">0</span></button>
+      </nav>
+
+      <div class="chats-block" id="chats-block">
+        <div class="chats-tools">
+          <label class="search-box embed">
+            <span data-icon="search" data-size="16"></span>
+            <input id="chat-search" type="search" placeholder="Поиск по чатам…" aria-label="Поиск по чатам" autocomplete="off">
+          </label>
+          <button class="icon-btn accent" id="btn-new-chat" aria-label="Новый чат" title="Новый чат"><span data-icon="edit"></span></button>
+        </div>
+        <ul id="chat-list" class="chat-list"></ul>
+      </div>
+
+      <div class="side-foot">
+        <div class="model-pill" id="model-pill" title="Состояние языковой модели">
+          <i class="dot"></i><span class="model-pill-text">Проверяю модель…</span>
+        </div>
+        <div class="quota-box hidden" id="quota-box">
+          <div class="quota-row" id="quota-row-5h">
+            <div class="quota-meta"><span>Сессия 5 ч</span><span id="q-5h-label">0%</span></div>
+            <div class="quota-track"><div class="quota-fill" id="q-5h-fill"></div></div>
+          </div>
+          <div class="quota-row" id="quota-row-week">
+            <div class="quota-meta"><span>Неделя</span><span id="q-week-label">0%</span></div>
+            <div class="quota-track"><div class="quota-fill" id="q-week-fill"></div></div>
+          </div>
+        </div>
+        <div class="profile">
+          <div class="avatar" id="avatar">?</div>
+          <div class="profile-name"><strong id="profile-name"></strong><span id="profile-role"></span></div>
+          <button class="icon-btn" id="btn-theme" aria-label="Сменить тему" title="Тема"><span data-icon="moon"></span></button>
+          <button class="icon-btn" id="btn-settings" aria-label="Настройки" title="Настройки"><span data-icon="settings"></span></button>
+          <button class="icon-btn" id="btn-logout" aria-label="Выйти" title="Выйти"><span data-icon="logout"></span></button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-btn only-mobile" id="btn-menu" aria-label="Открыть меню"><span data-icon="menu" data-size="22"></span></button>
+        <div class="topbar-titles">
+          <h1 class="topbar-title" id="topbar-title">Чат</h1>
+          <span class="topbar-sub" id="topbar-sub"><i class="dot"></i><span></span></span>
+        </div>
+        <div class="topbar-right">
+          <span class="lock-badge hidden" id="lock-badge" title="Гости не могут пользоваться ИИ"><span data-icon="lock" data-size="14"></span><span class="lock-text">ИИ закрыт</span></span>
+          <button class="icon-btn only-mobile" id="btn-new-chat-top" aria-label="Новый чат"><span data-icon="edit" data-size="20"></span></button>
+        </div>
+      </header>
+
+      <!-- ===== Чат ===== -->
+      <section class="view view-chat" data-view="chat">
+        <div class="messages" id="messages">
+          <div class="thread" id="thread"></div>
+          <div class="thread-end" id="thread-end" aria-hidden="true"></div>
+          <div class="empty-chat" id="empty-chat">
+            <div class="hello-mark only-klodeg" data-claude-mark aria-hidden="true"></div>
+            <h2 class="hello"><span id="hello-lead">Привет</span><span id="hello-name"></span></h2>
+            <p class="muted" id="empty-sub">Чем займёмся? Можно приложить фото, PDF или код.</p>
+            <div class="suggestions" id="suggestions"></div>
+          </div>
+        </div>
+        <button class="scroll-down hidden" id="btn-scroll-down" aria-label="Вниз"><span data-icon="arrowDown"></span></button>
+        <form class="composer" id="composer">
+          <div class="quota-banner hidden" id="quota-banner" role="status"></div>
+          <div class="composer-box embed" id="composer-box">
+            <div class="att-row" id="att-row"></div>
+            <textarea id="input" rows="1" placeholder="Напиши сообщение…" aria-label="Сообщение" enterkeyhint="send"></textarea>
+            <div class="composer-bar">
+              <button type="button" class="icon-btn" id="btn-attach" aria-label="Прикрепить файл" title="Фото, PDF, документ, код"><span data-icon="paperclip" data-size="20"></span></button>
+              <input type="file" id="file-input" multiple hidden>
+              <button type="button" class="chip" id="btn-web" aria-pressed="false" title="Искать в интернете"><span data-icon="globe" data-size="16"></span><span>Поиск</span></button>
+              <button type="button" class="chip" id="btn-think" aria-pressed="true" title="Размышлять перед ответом: умнее, но дольше"><span data-icon="brain" data-size="16"></span><span>Думать</span></button>
+              <span class="grow"></span>
+              <span class="model-tag only-klodeg" title="Antonchik · Claude Fable 8">Claude Fable 8</span>
+              <button type="submit" class="send-btn" id="btn-send" aria-label="Отправить"><span data-icon="arrowUp" data-size="20"></span></button>
+            </div>
+          </div>
+          <p class="composer-hint" id="composer-hint">ИИ работает без цензуры и может ошибаться</p>
+        </form>
+      </section>
+
+      <!-- ===== Картинки ===== -->
+      <section class="view view-image hidden" data-view="image">
+        <div class="page wide">
+          <div class="image-layout">
+            <form id="img-form" class="card img-form">
+              <label class="field">Что нарисовать
+                <textarea id="img-request" rows="4" placeholder="Девушка-киберпанк на крыше под неоновым дождём, кинематографичный свет…"></textarea>
+              </label>
+              <p class="hint">Пиши своими словами, можно с настройками: «1024 на 1024», «cfg 7». Модель сама соберёт промпт.</p>
+
+              <label class="field">Модель
+                <select id="img-model"></select>
+              </label>
+
+              <div class="field">Формат
+                <div class="segmented" id="img-ratio" role="radiogroup" aria-label="Формат">
+                  <button type="button" data-size="832x1216" aria-pressed="true"><i class="ratio r-portrait"></i>Портрет</button>
+                  <button type="button" data-size="1024x1024"><i class="ratio r-square"></i>Квадрат</button>
+                  <button type="button" data-size="1216x832"><i class="ratio r-land"></i>Пейзаж</button>
+                  <button type="button" data-size="768x1344"><i class="ratio r-tall"></i>9:16</button>
+                </div>
+              </div>
+
+              <details class="more">
+                <summary>Тонкие настройки</summary>
+                <div class="more-body">
+                  <div class="grid-2">
+                    <label class="field">Ширина<input id="img-width" type="number" inputmode="numeric" step="64" min="512" max="1536" value="832"></label>
+                    <label class="field">Высота<input id="img-height" type="number" inputmode="numeric" step="64" min="512" max="1536" value="1216"></label>
+                    <label class="field">Шаги<input id="img-steps" type="number" inputmode="numeric" min="4" max="60" value="28"></label>
+                    <label class="field">CFG<input id="img-cfg" type="number" inputmode="decimal" step="0.5" min="1" max="15" value="6.5"></label>
+                    <label class="field">Сэмплер
+                      <select id="img-sampler">
+                        <option>DPM++ 2M</option><option>Euler a</option><option>DPM++ SDE</option><option>DPM++ 2M SDE</option>
+                      </select>
+                    </label>
+                    <label class="field">Scheduler
+                      <select id="img-scheduler"><option>Karras</option><option>Automatic</option><option>Exponential</option></select>
+                    </label>
+                  </div>
+                  <label class="field"><span>Seed <span class="muted">· пусто = случайный</span></span><input id="img-seed" type="number" inputmode="numeric" placeholder="-1"></label>
+                  <label class="switch"><input type="checkbox" id="img-adetailer" checked><span></span>ADetailer: исправлять лица</label>
+                  <label class="switch"><input type="checkbox" id="img-direct"><span></span>Мой промпт как есть, без ИИ</label>
+                  <label class="field"><span>Негативный промпт <span class="muted">· для прямого режима</span></span>
+                    <textarea id="img-neg" rows="2" placeholder="blurry, lowres, bad anatomy…"></textarea>
+                  </label>
+                </div>
+              </details>
+
+              <button type="submit" class="btn primary block" id="img-submit"><span data-icon="sparkles"></span>Сгенерировать</button>
+
+              <div id="img-status" class="progress-box hidden">
+                <div class="progress"><div id="img-progress-bar"></div></div>
+                <div id="img-status-text" class="hint"></div>
+              </div>
+            </form>
+
+            <div class="img-result">
+              <div id="img-hero" class="img-hero">
+                <div class="placeholder"><span data-icon="image" data-size="30"></span><p>Здесь появится картинка</p></div>
+              </div>
+              <div id="img-plan" class="card plan hidden">
+                <div class="label">Подготовленный промпт</div>
+                <p id="img-plan-expl"></p>
+                <div id="img-plan-meta" class="mono muted"></div>
+                <details class="more"><summary>Промпт</summary>
+                  <div class="more-body">
+                    <p class="mono" id="img-plan-pos"></p>
+                    <p class="mono muted" id="img-plan-neg"></p>
+                  </div>
+                </details>
+              </div>
+              <h3 class="section-title">Мои картинки</h3>
+              <div id="img-gallery" class="gallery"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Звонок ===== -->
+      <section class="view view-voice hidden" data-view="voice">
+        <div class="page narrow voice-page">
+          <div class="voice-stage">
+            <div id="voice-orb" class="orb" data-state="idle"><div class="orb-ring"></div><div class="orb-core"></div></div>
+            <p id="voice-status" class="voice-status">Поговори с ИИ голосом</p>
+            <p class="hint center">Говори свободно: паузы определяются сами. Если заговоришь во время ответа, ИИ замолчит.</p>
+            <div class="voice-actions">
+              <button class="btn primary" id="btn-call" type="button"><span data-icon="phone"></span>Начать звонок</button>
+              <button class="btn hidden" id="btn-interrupt" type="button">Перебить</button>
+            </div>
+          </div>
+          <details class="more card voice-settings">
+            <summary>Голос и чувствительность</summary>
+            <div class="more-body">
+              <label class="field">Голос ИИ<select id="voice-select"></select></label>
+              <label class="field">Чувствительность микрофона
+                <input id="voice-vad" type="range" min="0.015" max="0.09" step="0.005" value="0.035">
+              </label>
+              <div class="meter"><div id="voice-meter"></div></div>
+            </div>
+          </details>
+          <div class="voice-log" id="voice-log"></div>
+        </div>
+      </section>
+
+      <!-- ===== Агенты ===== -->
+      <section class="view view-agents hidden" data-view="agents">
+        <div class="agents-wrap">
+          <div class="page agents-page">
+            <div class="card agents-setup">
+              <label class="field">Тема разговора
+                <input id="agents-topic" value="Стоит ли давать локальному ИИ полную свободу без цензуры?">
+              </label>
+              <div class="agents-opts">
+                <label class="field inline">Реплик<input id="agents-max" type="number" inputmode="numeric" min="2" max="30" value="8"></label>
+                <label class="switch"><input type="checkbox" id="agents-voice" checked><span></span>Озвучивать</label>
+                <span class="grow"></span>
+                <button class="btn small" type="button" id="btn-agents-edit"><span data-icon="edit" data-size="15"></span>Персонажи</button>
+              </div>
+              <div id="agents-cards" class="agents-cards hidden"></div>
+            </div>
+
+            <div class="agents-feed" id="agents-feed">
+              <div class="placeholder"><span data-icon="users" data-size="30"></span><p>Персонажи обсуждают тему на одной модели. Можно вмешаться.</p></div>
+            </div>
+          </div>
+
+          <div class="agents-dock">
+            <div class="agents-controls">
+              <button class="btn primary" type="button" id="btn-agents-run"><span data-icon="play" data-size="16"></span>Запустить</button>
+              <button class="btn" type="button" id="btn-agents-step">+1 реплика</button>
+              <button class="btn ghost" type="button" id="btn-agents-clear">Очистить</button>
+            </div>
+            <form id="agents-say" class="say-box embed">
+              <input id="agents-msg" placeholder="Вмешаться в разговор…" aria-label="Твоя реплика" enterkeyhint="send" autocomplete="off">
+              <button class="send-btn" type="submit" aria-label="Отправить реплику"><span data-icon="arrowUp" data-size="18"></span></button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Зрение (YOLO) ===== -->
+      <section class="view view-yolo hidden" data-view="yolo">
+        <div class="page wide yolo-page">
+          <div class="yolo-stage" id="yolo-stage">
+            <div class="placeholder" id="yolo-empty"><span data-icon="eye" data-size="30"></span><p>Включи камеру: YOLO11 распознаёт объекты, позы и силуэты в реальном времени.</p></div>
+            <img id="yolo-view" class="hidden" alt="Поток с камеры с разметкой YOLO">
+            <div class="yolo-hud hidden" id="yolo-hud"><span id="yolo-fps" class="mono">— FPS</span><span id="yolo-objects"></span></div>
+          </div>
+          <div class="card yolo-controls">
+            <button class="btn primary block" type="button" id="btn-yolo"><span data-icon="eye"></span>Включить камеру</button>
+            <label class="field">Эффект
+              <select id="yolo-preset">
+                <option value="cyber">Cyber HUD</option>
+                <option value="breakcore">Breakcore Glitch</option>
+                <option value="all">Всё сразу</option>
+                <option value="pose">Скелеты</option>
+                <option value="seg">Маски силуэтов</option>
+                <option value="snippet">Snippet (моно-красный)</option>
+                <option value="classic">Классика</option>
+              </select>
+            </label>
+            <label class="switch"><input type="checkbox" id="yolo-front"><span></span>Фронтальная камера</label>
+            <details class="more">
+              <summary>Ещё настройки</summary>
+              <div class="more-body">
+                <div class="grid-2">
+                  <label class="field">Модель
+                    <select id="yolo-size"><option value="n">yolo11n · быстрая</option><option value="s">yolo11s · точная</option></select>
+                  </label>
+                  <label class="field">Уверенность<input id="yolo-conf" type="number" inputmode="decimal" step="0.05" min="0.1" max="0.9" value="0.35"></label>
+                </div>
+                <label class="switch"><input type="checkbox" id="yolo-pose"><span></span>Скелеты поверх</label>
+                <label class="switch"><input type="checkbox" id="yolo-seg"><span></span>Маски поверх</label>
+                <label class="switch"><input type="checkbox" id="yolo-face"><span></span>Эффект на лицах</label>
+                <label class="field">Эффект на лице
+                  <select id="yolo-face-effect">
+                    <option value="cyber_scan">Кибер-сканер</option><option value="glitch">Глитч</option>
+                    <option value="mosaic">Мозаика</option><option value="eye_bar">Плашка на глазах</option>
+                    <option value="black_box">Чёрный квадрат</option>
+                  </select>
+                </label>
+              </div>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Админка ===== -->
+      <section class="view view-admin hidden" data-view="admin">
+        <div class="page admin-page">
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title"><span class="card-ico" data-icon="bolt"></span><div><h3>Языковая модель</h3><p class="hint" id="llm-model-name"></p></div></div>
+              <span class="status-tag" id="llm-state">—</span>
+            </div>
+            <p class="form-error" id="llm-problem"></p>
+            <div class="btn-row">
+              <button class="btn" id="btn-llm-start"><span data-icon="play" data-size="16"></span>Запустить</button>
+              <button class="btn" id="btn-llm-stop"><span data-icon="power" data-size="16"></span>Выгрузить</button>
+              <button class="btn ghost" id="btn-llm-refresh"><span data-icon="refresh" data-size="16"></span>Обновить</button>
+            </div>
+            <details class="more"><summary>Команда запуска и лог</summary>
+              <div class="more-body">
+                <pre class="log" id="llm-cmd"></pre>
+                <pre class="log" id="llm-log"></pre>
+              </div>
+            </details>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title"><span class="card-ico" data-icon="lock"></span><div><h3>Доступ гостей к ИИ</h3><p class="hint" id="lock-text"></p></div></div>
+              <label class="switch" aria-label="Доступ гостей"><input type="checkbox" id="lock-toggle"><span></span></label>
+            </div>
+          </div>
+
+          <div class="card hidden" id="appeals-card">
+            <div class="card-head">
+              <div class="card-title"><span class="card-ico" data-icon="shield"></span><div><h3>Апелляции на проверку</h3><p class="hint">Запросы от приостановленных пользователей.</p></div></div>
+              <span class="status-tag warn" id="appeals-count">0</span>
+            </div>
+            <div id="appeals-list" class="appeals-list"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title"><span class="card-ico" data-icon="users"></span><div><h3>Пользователи</h3><p class="hint">Квоты в единицах нагрузки за 5 часов и за неделю (генерация 1.0, новый промпт 0.25, кэш 0.05). Пустое поле — без лимита.</p></div></div>
+              <button class="btn small" id="btn-add-user"><span data-icon="plus" data-size="15"></span>Добавить</button>
+            </div>
+            <div id="users" class="users"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Настройки профиля -->
+  <dialog id="settings-dialog" class="sheet">
+    <form id="settings-form" method="dialog">
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <div class="sheet-head"><h2>Настройки</h2><button class="icon-btn" value="cancel" formnovalidate aria-label="Закрыть"><span data-icon="close"></span></button></div>
+      <div class="sheet-body">
+        <div id="settings-quota" class="settings-quota hidden">
+          <div class="label">Использование квоты</div>
+          <div id="settings-quota-rows" class="quota-box"></div>
+          <p class="hint">5-часовая сессия и недельное окно стартуют с первого сообщения и полностью сбрасываются по таймеру.</p>
+        </div>
+        <label class="field">О себе: что ИИ должен о тебе знать
+          <textarea name="about_me" rows="3" maxlength="4000" placeholder="Как тебя зовут, чем занимаешься, что любишь…"></textarea>
+        </label>
+        <label class="field">Как отвечать
+          <textarea name="instructions" rows="3" maxlength="4000" placeholder="Например: на «ты», коротко, без воды…"></textarea>
+        </label>
+        <label class="switch"><input type="checkbox" name="adapt_style"><span></span>Подстраиваться под мой стиль общения</label>
+        <label class="field"><span>Профиль стиля <span class="muted">· ИИ составляет сам, можно править</span></span>
+          <textarea name="style_profile" rows="3" maxlength="2000" placeholder="Появится после нескольких сообщений…"></textarea>
+        </label>
+        <button type="button" class="btn small" id="btn-analyze-style"><span data-icon="sparkles" data-size="15"></span>Проанализировать сейчас</button>
+        <div class="tos-settings-row only-klodeg">
+          <div>
+            <div class="label">Правовая информация</div>
+            <p class="hint">Правила использования Клодега (Antonchik)</p>
+          </div>
+          <button type="button" class="btn" id="btn-open-tos">Условия использования</button>
+        </div>
+        <details class="more">
+          <summary>Сменить пароль</summary>
+          <div class="more-body">
+            <label class="field">Текущий пароль<input name="old_password" type="password" autocomplete="current-password"></label>
+            <label class="field">Новый пароль<input name="new_password" type="password" autocomplete="new-password" minlength="4"></label>
+          </div>
+        </details>
+        <details class="more">
+          <summary>Адрес сервера</summary>
+          <div class="more-body">
+            <p class="hint">Для ручного переопределения адреса бэкенда. Пустое поле — автоматический адрес.</p>
+            <label class="field">URL бэкенда<input name="api_url" placeholder="https://..." autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+          </div>
+        </details>
+        <p class="form-error" id="settings-error"></p>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn ghost" value="cancel" formnovalidate>Отмена</button>
+        <button class="btn primary" id="settings-save" value="save">Сохранить</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Условия использования (обязательное принятие при первом входе и просмотр в любой момент) -->
+  <dialog id="tos-dialog" class="sheet">
+    <div class="tos-wrap">
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <div class="sheet-head">
+        <div class="tos-brand">
+          <span class="tos-mark" data-claude-mark aria-hidden="true"></span>
+          <h2 class="tos-title" id="tos-title">Добро пожаловать в Клодег</h2>
+        </div>
+        <button class="icon-btn hidden" type="button" id="tos-close-x" aria-label="Закрыть"><span data-icon="close"></span></button>
+      </div>
+      <div class="sheet-body">
+        <p id="tos-intro" class="tos-intro">
+          Вы общаетесь с моделью <strong>Claude Fable 8</strong> от компании <strong>Antonchik</strong>.
+          Перед началом работы ознакомьтесь с
+          <button type="button" class="link-btn" id="tos-toggle-link">Условиями использования</button>
+          и подтвердите согласие.
+        </p>
+        <div id="tos-document" class="tos-doc hidden">
+          <div class="tos-doc-head">Условия использования Клодега · Antonchik</div>
+          <p class="tos-clause">1. Вашему аккаунту в любом случае пизда.</p>
+        </div>
+      </div>
+      <div class="sheet-actions" id="tos-actions-gate">
+        <button class="btn ghost" type="button" id="tos-logout-btn">Выйти</button>
+        <button class="btn primary" type="button" id="tos-accept-btn">Принимаю условия</button>
+      </div>
+      <div class="sheet-actions hidden" id="tos-actions-view">
+        <button class="btn primary" type="button" id="tos-ok-btn">Понятно</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Просмотр чатов любого пользователя (только для админа) -->
+  <dialog id="chats-dialog" class="sheet wide-sheet">
+    <div class="inspector-wrap">
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <div class="sheet-head">
+        <div class="inspector-head-title">
+          <h2 id="insp-title">Чаты пользователя</h2>
+          <span class="status-tag" id="insp-status">Активен</span>
+        </div>
+        <div class="row">
+          <button class="btn danger" type="button" id="insp-ban-btn">Приостановить</button>
+          <button class="icon-btn" type="button" id="insp-close" aria-label="Закрыть"><span data-icon="close"></span></button>
+        </div>
+      </div>
+      <div class="inspector-body">
+        <aside class="inspector-list" id="insp-chat-list"></aside>
+        <div class="inspector-thread" id="insp-thread">
+          <div class="placeholder"><span data-icon="chat" data-size="28"></span><p>Выбери чат слева, чтобы прочитать переписку.</p></div>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Универсальный диалог: подтверждение / ввод -->
+  <dialog id="ask-dialog" class="sheet small-sheet">
+    <form method="dialog" id="ask-form">
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <div class="sheet-body">
+        <h3 id="ask-title"></h3>
+        <p class="muted" id="ask-text"></p>
+        <div id="ask-fields"></div>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn ghost" value="cancel" formnovalidate>Отмена</button>
+        <button class="btn primary" value="ok" id="ask-ok">OK</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
