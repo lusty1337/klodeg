@@ -959,6 +959,58 @@ dialog.sheet.settings-sheet { width: min(760px, calc(100% - 32px)); }
 .yolo-hud > span:empty { display: none; }
 .yolo-controls { display: grid; gap: 14px; position: sticky; top: 0; }
 
+/* ================= стемы (Demucs) ================= */
+.stems-page { --page-w: 820px; }
+.stems-page > .card { display: grid; gap: 14px; }
+.stems-engine-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.stems-dropzone {
+  display: grid; justify-items: center; gap: 6px; padding: 28px 20px; text-align: center;
+  border-radius: var(--r-m); border: 1.5px dashed var(--border-strong); background: var(--surface-2);
+  cursor: pointer; transition: border-color 150ms ease, background-color 150ms ease, transform 140ms var(--ease-out-quart);
+}
+.stems-dropzone:active { transform: scale(.992); }
+.stems-dropzone.drag { border-color: var(--accent); background: var(--accent-soft); }
+.stems-dropzone.busy { opacity: .6; cursor: progress; pointer-events: none; }
+.stems-drop-ico {
+  width: 48px; height: 48px; border-radius: var(--r-full); display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent); margin-bottom: 4px;
+}
+.stems-dropzone strong { font-size: 15.5px; font-weight: 600; color: var(--text); }
+.stems-options { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: flex-end; }
+.stems-opt-group { display: grid; gap: 6px; }
+.stems-opt-label { font-size: 12.5px; font-weight: 500; color: var(--muted); }
+.stems-res-title { min-width: 0; }
+.stems-res-title h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stems-zip-btn { height: 46px; font-size: 15px; text-decoration: none; }
+.stems-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.stem-metric {
+  display: grid; gap: 3px; padding: 12px 14px; border-radius: var(--r-m);
+  background: var(--surface-2); border: 1px solid var(--border); text-align: left;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+.stem-metric.clickable { cursor: pointer; }
+.stem-metric-label { font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.stem-metric-val { font-size: 20px; font-weight: 650; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1.2; }
+.stem-metric-sub { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stems-tracks { display: grid; gap: 10px; }
+.stem-row {
+  display: grid; gap: 8px; padding: 12px 14px; border-radius: var(--r-m);
+  background: var(--surface-2); border: 1px solid var(--border);
+}
+.stem-row-head { display: flex; align-items: center; gap: 10px; }
+.stem-row-head strong { font-size: 14.5px; font-weight: 600; flex: 1; min-width: 0; }
+.stem-row-head a.btn { text-decoration: none; }
+.stem-row audio { width: 100%; height: 36px; }
+.stems-history-list { display: grid; gap: 6px; }
+.stems-hist-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r-m);
+  background: var(--surface); color: var(--text); text-align: left;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+.stems-hist-item strong { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.stems-hist-item[aria-current="page"] { border-color: var(--accent); background: var(--accent-soft); }
+
 /* ================= админка ================= */
 .admin-page { --page-w: 780px; }
 .admin-page > .card { display: grid; gap: 14px; }
@@ -1136,6 +1188,9 @@ dialog.sheet form { display: flex; flex-direction: column; max-height: inherit; 
   .gal-card:hover img { opacity: .85; }
   .scroll-down:hover { color: var(--text); }
   .insp-chat-btn:hover { background-color: var(--surface-2); }
+  .stems-dropzone:hover { border-color: var(--accent); }
+  .stem-metric.clickable:hover { border-color: var(--accent); background-color: var(--surface-3); }
+  .stems-hist-item:hover { background-color: var(--surface-2); }
   .btn.ink:hover { opacity: .9; }
 }
 @media (hover: none) {
@@ -1237,6 +1292,20 @@ dialog.sheet form { display: flex; flex-direction: column; max-height: inherit; 
 
   /* зрение */
   .yolo-stage { aspect-ratio: 3 / 4; }
+
+  /* стемы на телефоне */
+  .stems-page .card-head { flex-wrap: wrap; align-items: flex-start; gap: 8px 12px; }
+  .stems-page .card-head > div { flex: 1 1 200px; min-width: 0; }
+  .stems-page .card-head > div .hint { overflow-wrap: anywhere; }
+  .stems-engine-btns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .stems-engine-btns .btn { min-width: 0; padding: 0 10px; font-size: 14px; }
+  .stems-engine-btns > :last-child { grid-column: 1 / -1; }
+  .stems-options { flex-direction: column; align-items: stretch; }
+  .stems-options .segmented { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+  .stems-options .segmented button { height: auto; min-height: 36px; padding: 6px 4px; font-size: 12.5px; line-height: 1.2; white-space: nowrap; }
+  .stems-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .stems-metrics > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .stems-zip-btn { height: auto; min-height: 46px; padding: 10px 14px; white-space: normal; text-align: center; line-height: 1.3; }
 
   /* админка на телефоне: удобные карточки под одну руку + двухшаговый инспектор чатов */
   .admin-page .card-head { flex-wrap: wrap; align-items: center; gap: 10px; }

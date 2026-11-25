@@ -10,8 +10,9 @@ import { initImage, loadImageMode } from "./image.js";
 import { initVoice, loadVoiceMode, stopCall } from "./voice.js";
 import { initAgents, loadAgentsMode, stopArena } from "./agents.js";
 import { initYolo, stopYolo } from "./yolo.js";
+import { initStems, loadStemsMode } from "./stems.js";
 
-const TITLES = { chat: "Чат", image: "Картинки", voice: "Звонок", agents: "Агенты", yolo: "Зрение", admin: "Админка" };
+const TITLES = { chat: "Чат", image: "Картинки", voice: "Звонок", agents: "Агенты", yolo: "Зрение", stems: "Стемы", admin: "Админка" };
 const state = { user: null, aiLocked: false, setupMode: false, mode: null, status: null, usage: null, statusTimer: 0 };
 
 const FAVICON_NH =
@@ -415,8 +416,8 @@ async function enterApp() {
   $$("[data-perm]").forEach((b) => b.classList.toggle("hidden", !state.user.perms[b.dataset.perm]));
   $$("[data-admin]").forEach((b) => b.classList.toggle("hidden", !isAdmin));
 
-  // в режиме Claude скрываем панель режимов NeuroHub, если у гостя нет спец-доступов (картинки/звонок/зрение)
-  const hasExtraModes = isAdmin || state.user.perms.image || state.user.perms.voice || state.user.perms.yolo;
+  // в режиме Claude скрываем панель режимов NeuroHub, если у гостя нет спец-доступов (картинки/звонок/зрение/стемы)
+  const hasExtraModes = isAdmin || state.user.perms.image || state.user.perms.voice || state.user.perms.yolo || state.user.perms.stems;
   $("#modes-nav").classList.toggle("hidden", !hasExtraModes);
 
   const initial = state.user.username.slice(0, 1).toUpperCase();
@@ -476,6 +477,7 @@ export function setMode(mode) {
   else if (mode === "image") loadImageMode();
   else if (mode === "voice") loadVoiceMode();
   else if (mode === "agents") loadAgentsMode(state.user);
+  else if (mode === "stems") loadStemsMode();
 }
 
 $$(".mode-btn").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
@@ -598,6 +600,7 @@ const STATE_TEXT = {
   ready: ["on", "Модель готова"],
   loading: ["warn", "Модель загружается…"],
   paused: ["warn", "Видеокарта занята картинкой"],
+  paused_demucs: ["warn", "Видеокарта занята Demucs"],
   offline_managed: ["", "Модель спит"],
   offline: ["off", "Сервер модели выключен"],
 };
@@ -606,6 +609,7 @@ const INPUT_HINT = {
   ready: "Чем могу помочь сегодня?",
   loading: "Модель загружается, можно писать…",
   paused: "Сервер занят, напишите чуть позже…",
+  paused_demucs: "Видеокарта занята разбором аудио (Demucs)…",
   offline_managed: "Напишите сообщение — модель проснётся сама…",
   offline: "Сервер модели выключен…",
 };
@@ -625,7 +629,7 @@ async function refreshStatus() {
     const s = await api("/api/status");
     state.status = s;
     let key = s.llm_state;
-    if (s.llm_paused) key = "paused";
+    if (s.llm_paused) key = s.llm_pause_reason === "demucs" ? "paused_demucs" : "paused";
     else if (key === "offline" && s.llm_managed) key = "offline_managed";
     isLoading = key === "loading";
     const [cls, text] = STATE_TEXT[key] || STATE_TEXT.offline;
@@ -755,6 +759,7 @@ initImage({ onUsage: updateUsage });
 initVoice({ onUsage: updateUsage });
 initAgents();
 initYolo();
+initStems();
 
 async function boot() {
   try {

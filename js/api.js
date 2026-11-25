@@ -200,3 +200,19 @@ export async function streamGet(path, onEvent, signal) {
   if (!res.ok) return handle(res);
   await readSse(res, onEvent);
 }
+
+export async function streamForm(path, formData, onEvent, signal) {
+  const res = await fetchWithRetry(path, {
+    method: "POST",
+    headers: headers(),
+    body: formData,
+    signal,
+  });
+  if (!res.ok) return handle(res);
+  await readSse(res, onEvent);
+}
+
+export function authedUrl(path) {
+  const sep = path.includes("?") ? "&" : "?";
+  return `${currentBase}${path}${sep}token=${encodeURIComponent(auth.token || "")}`;
+}

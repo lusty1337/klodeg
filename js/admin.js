@@ -169,8 +169,12 @@ function pollLlm() {
 async function loadLlm() {
   try {
     const d = await api("/api/admin/llm");
-    const key = d.paused ? "paused" : d.state;
-    const [cls, text] = key === "paused" ? ["warn", "Пауза: рисуется картинка"] : LLM_STATE[key] || LLM_STATE.offline;
+    const key = d.paused ? (d.pause_reason === "demucs" ? "paused_demucs" : "paused") : d.state;
+    const [cls, text] = key === "paused_demucs"
+      ? ["warn", "Пауза: Demucs в VRAM"]
+      : key === "paused"
+        ? ["warn", "Пауза: рисуется картинка"]
+        : LLM_STATE[key] || LLM_STATE.offline;
     const tag = $("#llm-state");
     tag.className = `status-tag ${cls}`;
     tag.textContent = text;
@@ -456,7 +460,7 @@ function renderUsers(users, openSet = null) {
           "div",
           { class: "more-body" },
           el("label", { class: "field user-role-field" }, "Роль", role),
-          el("div", { class: "user-perms" }, permSwitch(u, "image", "Картинки"), permSwitch(u, "voice", "Звонок"), permSwitch(u, "yolo", "Зрение")),
+          el("div", { class: "user-perms" }, permSwitch(u, "image", "Картинки"), permSwitch(u, "voice", "Звонок"), permSwitch(u, "yolo", "Зрение"), permSwitch(u, "stems", "Стемы")),
           el(
             "div",
             { class: "user-limits" },

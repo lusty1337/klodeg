@@ -187,6 +187,7 @@
         <button class="mode-btn" data-mode="voice" data-perm="voice"><span data-icon="phone" data-size="20"></span><span>Звонок</span></button>
         <button class="mode-btn" data-mode="agents" data-admin><span data-icon="users" data-size="20"></span><span>Агенты</span></button>
         <button class="mode-btn" data-mode="yolo" data-perm="yolo"><span data-icon="eye" data-size="20"></span><span>Зрение</span></button>
+        <button class="mode-btn" data-mode="stems" data-perm="stems"><span data-icon="music" data-size="20"></span><span>Стемы</span></button>
         <button class="mode-btn" data-mode="admin" data-admin><span data-icon="shield" data-size="20"></span><span>Админка</span><span class="nav-badge hidden" id="admin-appeals-badge">0</span></button>
       </nav>
 
@@ -511,6 +512,69 @@
                 </label>
               </div>
             </details>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Стемы (Demucs) ===== -->
+      <section class="view view-stems hidden" data-view="stems">
+        <div class="page stems-page">
+          <div class="card stems-engine-card">
+            <div class="card-head">
+              <div>
+                <h2>Demucs · HTDemucs-ft</h2>
+                <p class="hint" id="stems-engine-sub">Выгрузит языковую модель и загрузится в видеопамять RTX 2060</p>
+              </div>
+              <span class="status-tag" id="stems-engine-state">Выгружен</span>
+            </div>
+            <div class="btn-row stems-engine-btns">
+              <button class="btn primary" type="button" id="btn-stems-load"><span data-icon="play" data-size="16"></span>Загрузить в VRAM</button>
+              <button class="btn" type="button" id="btn-stems-unload" disabled><span data-icon="power" data-size="16"></span>Выгрузить</button>
+              <button class="btn ghost" type="button" id="btn-stems-return-llm" disabled><span data-icon="refresh" data-size="16"></span>Выгрузить и вернуть чат</button>
+            </div>
+          </div>
+
+          <div class="card stems-upload-card">
+            <div class="stems-dropzone" id="stems-dropzone" role="button" tabindex="0" aria-label="Загрузить трек для разделения">
+              <span class="stems-drop-ico" data-icon="upload" data-size="26"></span>
+              <strong>Перетащи трек сюда или нажми, чтобы выбрать</strong>
+              <span class="hint">MP3, WAV, FLAC, M4A, OGG · до 15 мин · дорожки сразу готовы для FL Studio</span>
+              <input type="file" id="stems-file" accept="audio/*,.mp3,.wav,.flac,.m4a,.ogg,.opus,.mp4,.webm" hidden>
+            </div>
+
+            <div class="stems-options">
+              <div class="stems-opt-group">
+                <span class="stems-opt-label">Дорожки</span>
+                <div class="segmented" id="stems-mode" role="group" aria-label="Режим разделения">
+                  <button type="button" data-val="4stems" aria-pressed="true">4 стема</button>
+                  <button type="button" data-val="4stems_inst" aria-pressed="false">4 + Минус</button>
+                  <button type="button" data-val="2stems" aria-pressed="false">Вокал + Минус</button>
+                </div>
+              </div>
+              <div class="stems-opt-group">
+                <span class="stems-opt-label">Формат</span>
+                <div class="segmented" id="stems-fmt" role="group" aria-label="Формат файлов">
+                  <button type="button" data-val="wav24" aria-pressed="true">WAV 24-bit</button>
+                  <button type="button" data-val="wav16" aria-pressed="false">WAV 16-bit</button>
+                  <button type="button" data-val="mp3" aria-pressed="false">MP3 320</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="progress-box hidden" id="stems-progress-box">
+              <div class="progress"><div id="stems-progress-bar"></div></div>
+              <p class="hint" id="stems-progress-text"></p>
+            </div>
+          </div>
+
+          <div class="card stems-result hidden" id="stems-result"></div>
+
+          <div class="card stems-history-card hidden" id="stems-history-card">
+            <div class="card-head">
+              <h2>Последние разборы</h2>
+              <span class="hint" id="stems-history-count"></span>
+            </div>
+            <div class="stems-history-list" id="stems-history-list"></div>
           </div>
         </div>
       </section>
