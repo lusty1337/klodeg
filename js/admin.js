@@ -1,6 +1,6 @@
 // режим "Админка": модель, доступ гостей, апелляции, просмотр любых чатов, пользователи и квоты
 import { api, fileUrl } from "./api.js";
-import { $, el, icon, toast, fmtTokens, fmtReset, fmtDateTime, ask, renderMarkdown, lightbox } from "./ui.js";
+import { $, el, icon, toast, fmtTokens, fmtReset, fmtDateTime, ask, renderMarkdown, lightbox, isMobile } from "./ui.js";
 
 let me = null;
 let onLockChange = () => {};
@@ -46,6 +46,9 @@ export function initAdmin(opts) {
     }
   });
   $("#insp-close").addEventListener("click", () => $("#chats-dialog").close());
+  $("#insp-back")?.addEventListener("click", () => {
+    $("#insp-body").dataset.mobileStep = "list";
+  });
   $("#insp-ban-btn").addEventListener("click", async () => {
     if (!inspUser) return;
     const isBanned = inspUser.ban_status && inspUser.ban_status !== "active";
@@ -90,7 +93,14 @@ async function loadLlm() {
     const tag = $("#llm-state");
     tag.className = `status-tag ${cls}`;
     tag.textContent = text;
-    $("#llm-model-name").textContent = d.model + (d.state === "ready" && d.uptime ? ` · работает ${Math.round(d.uptime / 60)} мин` : "");
+    const mins = Math.floor((d.uptime || 0) / 60);
+    const secs = (d.uptime || 0) % 60;
+    const suffix = d.state === "ready" && d.uptime
+      ? ` · работает ${mins || 1} мин`
+      : d.state === "loading" && d.uptime
+        ? ` · грузится ${mins ? `${mins} мин ` : ""}${secs} с (с SSD до 5 мин)`
+        : "";
+    $("#llm-model-name").textContent = d.model + suffix;
     $("#llm-problem").textContent = d.problem || "";
     $("#llm-cmd").textContent = d.cmd || "";
     $("#llm-log").textContent = d.log || "Лог пуст: модель ещё не запускалась.";
@@ -153,7 +163,7 @@ async function setBanStatus(user, status, reason = null) {
 async function suspendPrompt(user) {
   const r = await ask({
     title: `Приостановить ${user.username}?`,
-    text: "Пользователь увидит экран приостановки Клодега и сможет отправить апелляцию.",
+    text: "Пользователь увидит экран приостановки Claude и сможет отправить апелляцию.",
     ok: "Приостановить",
     danger: true,
     fields: [{ name: "reason", label: "Заметка для себя (пользователь её не увидит)", placeholder: "например: нарушение устных правил" }],
@@ -231,13 +241,14 @@ function limitField(u, field, label) {
 }
 
 function renderUsers(users) {
+  const desktop = !isMobile();
   $("#users").replaceChildren(
     ...users.map((u) => {
       const self = u.id === me.id;
       const role = el(
         "select",
-        { disabled: self, "aria-label": `Роль ${u.username}`, style: "width:auto" },
-        el("option", { value: "user", text: "гость (Клодег)" }),
+        { disabled: self, "aria-label": `Роль ${u.username}` },
+        el("option", { value: "user", text: "гость (Claude)" }),
         el("option", { value: "admin", text: "админ (NeuroHub)" })
       );
       role.value = u.role;
@@ -251,6 +262,97 @@ function renderUsers(users) {
       const u5Text = `${fmtTokens(us.used_5h)}${us.limit_5h != null ? ` / ${fmtTokens(us.limit_5h)} (${us.pct_5h}%)` : ""}${us.reset_5h ? ` · сброс ${fmtReset(us.reset_5h)}` : ""}`;
       const uwText = `${fmtTokens(us.used_week)}${us.limit_week != null ? ` / ${fmtTokens(us.limit_week)} (${us.pct_week}%)` : ""}${us.reset_week ? ` · сброс ${fmtReset(us.reset_week, true)}` : ""}`;
 
+      // быстрые главные действия всегда на виду (на телефоне удобно нажимать одной рукой)
+      const quickActions = el(
+        "div",
+        { class: "user-quick-actions" },
+        el("button", {
+          class: "btn", type: "button",
+          onclick: () => openUserChats(u),
+        }, icon("chat", 16), `Чаты (${u.chat_count || 0})`),
+        self ? null : (
+          isBanned
+            ? el("button", {
+                class: "btn primary", type: "button",
+                onclick: async () => {
+                  if (await setBanStatus(u, "active")) loadAdmin(me, !$("#lock-toggle").checked);
+                },
+              }, icon("play", 16), "Отозвать бан")
+            : el("button", {
+                class: "btn danger", type: "button",
+                onclick: async () => {
+                  if (await suspendPrompt(u)) loadAdmin(me, !$("#lock-toggle").checked);
+                },
+              }, icon("lock", 16), "Приостановить")
+        )
+      );
+
+      // второстепенные настройки на телефоне свёрнуты в аккордеон, на ПК открыты сразу
+      const moreDetails = el(
+        "details",
+        { class: "more user-more", open: desktop },
+        el("summary", { text: "Права, лимиты и управление" }),
+        el(
+          "div",
+          { class: "more-body" },
+          el("label", { class: "field user-role-field" }, "Роль", role),
+          el("div", { class: "user-perms" }, permSwitch(u, "image", "Картинки"), permSwitch(u, "voice", "Звонок"), permSwitch(u, "yolo", "Зрение")),
+          el(
+            "div",
+            { class: "user-limits" },
+            limitField(u, "limit_5h", "Лимит за 5 ч"),
+            limitField(u, "limit_week", "Лимит за неделю")
+          ),
+          el(
+            "div",
+            { class: "user-actions" },
+            el("button", {
+              class: "btn small", type: "button",
+              onclick: async () => {
+                const r = await ask({ title: `Новый пароль для ${u.username}`, fields: [{ name: "pw", type: "text", placeholder: "минимум 4 символа" }], ok: "Сменить" });
+                if (r?.pw) patch(u, { password: r.pw });
+              },
+            }, icon("key", 15), "Пароль"),
+            el("button", {
+              class: "btn small", type: "button",
+              onclick: async () => {
+                try {
+                  await api(`/api/admin/users/${u.id}/reset-usage`, { method: "POST", body: { scope: "5h" } });
+                  toast("5-часовое окно сброшено");
+                  loadAdmin(me, !$("#lock-toggle").checked);
+                } catch (e) {
+                  toast(e.message, true);
+                }
+              },
+            }, icon("refresh", 15), "Сброс 5 ч"),
+            el("button", {
+              class: "btn small", type: "button",
+              onclick: async () => {
+                try {
+                  await api(`/api/admin/users/${u.id}/reset-usage`, { method: "POST", body: { scope: "all" } });
+                  toast("Вся квота сброшена");
+                  loadAdmin(me, !$("#lock-toggle").checked);
+                } catch (e) {
+                  toast(e.message, true);
+                }
+              },
+            }, icon("refresh", 15), "Сброс всего"),
+            self ? null : el("button", {
+              class: "btn small ghost danger-text", type: "button",
+              onclick: async () => {
+                if (!(await ask({ title: `Удалить ${u.username}?`, text: "Удалятся и все его чаты. Отменить нельзя.", ok: "Удалить", danger: true }))) return;
+                try {
+                  await api(`/api/admin/users/${u.id}`, { method: "DELETE" });
+                  loadAdmin(me, !$("#lock-toggle").checked);
+                } catch (e) {
+                  toast(e.message, true);
+                }
+              },
+            }, icon("trash", 15), "Удалить")
+          )
+        )
+      );
+
       return el(
         "div",
         { class: `user-card${isBanned ? " disabled" : ""}` },
@@ -260,88 +362,20 @@ function renderUsers(users) {
           el("div", { class: "avatar", text: u.username.slice(0, 1).toUpperCase() }),
           el(
             "div",
-            { class: "grow" },
+            { class: "user-ident" },
             el("strong", { text: u.username }),
-            self ? el("span", { class: "muted", text: " · это ты" }) : null,
-            u.ban_reason ? el("span", { class: "muted", text: ` · ${u.ban_reason}` }) : null
+            el("span", { class: "muted", text: self ? "админ · это ты" : (u.ban_reason || (u.role === "admin" ? "админ" : "гость")) })
           ),
-          !self ? el("span", { class: `status-tag ${stCls}`, text: stLabel }) : null,
-          role
-        ),
-        el("div", { class: "user-perms" }, permSwitch(u, "image", "Картинки"), permSwitch(u, "voice", "Звонок"), permSwitch(u, "yolo", "Зрение")),
-        el(
-          "div",
-          { class: "user-limits" },
-          limitField(u, "limit_5h", "Лимит за 5 ч"),
-          limitField(u, "limit_week", "Лимит за неделю"),
-          el("div", { class: "user-usage" }, `5 ч: ${u5Text} · Неделя: ${uwText}`)
+          !self ? el("span", { class: `status-tag ${stCls}`, text: stLabel }) : null
         ),
         el(
           "div",
-          { class: "user-actions" },
-          el("button", {
-            class: "btn", type: "button",
-            onclick: () => openUserChats(u),
-          }, icon("chat", 15), `Чаты (${u.chat_count || 0})`),
-          el("button", {
-            class: "btn", type: "button",
-            onclick: async () => {
-              const r = await ask({ title: `Новый пароль для ${u.username}`, fields: [{ name: "pw", type: "text", placeholder: "минимум 4 символа" }], ok: "Сменить" });
-              if (r?.pw) patch(u, { password: r.pw });
-            },
-          }, icon("key", 15), "Пароль"),
-          el("button", {
-            class: "btn", type: "button",
-            onclick: async () => {
-              try {
-                await api(`/api/admin/users/${u.id}/reset-usage`, { method: "POST", body: { scope: "5h" } });
-                toast("5-часовое окно сброшено");
-                loadAdmin(me, !$("#lock-toggle").checked);
-              } catch (e) {
-                toast(e.message, true);
-              }
-            },
-          }, icon("refresh", 15), "Сброс 5 ч"),
-          el("button", {
-            class: "btn", type: "button",
-            onclick: async () => {
-              try {
-                await api(`/api/admin/users/${u.id}/reset-usage`, { method: "POST", body: { scope: "all" } });
-                toast("Вся квота сброшена");
-                loadAdmin(me, !$("#lock-toggle").checked);
-              } catch (e) {
-                toast(e.message, true);
-              }
-            },
-          }, icon("refresh", 15), "Сброс всего"),
-          self ? null : (
-            isBanned
-              ? el("button", {
-                  class: "btn primary", type: "button",
-                  onclick: async () => {
-                    if (await setBanStatus(u, "active")) loadAdmin(me, !$("#lock-toggle").checked);
-                  },
-                }, icon("play", 15), "Отозвать бан")
-              : el("button", {
-                  class: "btn danger", type: "button",
-                  onclick: async () => {
-                    if (await suspendPrompt(u)) loadAdmin(me, !$("#lock-toggle").checked);
-                  },
-                }, icon("lock", 15), "Приостановить")
-          ),
-          self ? null : el("button", {
-            class: "btn ghost", type: "button",
-            onclick: async () => {
-              if (!(await ask({ title: `Удалить ${u.username}?`, text: "Удалятся и все его чаты. Отменить нельзя.", ok: "Удалить", danger: true }))) return;
-              try {
-                await api(`/api/admin/users/${u.id}`, { method: "DELETE" });
-                loadAdmin(me, !$("#lock-toggle").checked);
-              } catch (e) {
-                toast(e.message, true);
-              }
-            },
-          }, icon("trash", 15), "Удалить")
-        )
+          { class: "user-usage-bar" },
+          el("span", { text: `5 ч: ${u5Text}` }),
+          el("span", { text: `Неделя: ${uwText}` })
+        ),
+        quickActions,
+        moreDetails
       );
     })
   );
@@ -364,6 +398,8 @@ async function openUserChats(user) {
   banBtn.className = `btn ${st === "active" ? "danger" : "primary"}${isSelf ? " hidden" : ""}`;
   banBtn.textContent = st === "active" ? "Приостановить" : "Отозвать бан";
 
+  $("#insp-body").dataset.mobileStep = "list";
+  $("#insp-current-title").textContent = "";
   $("#insp-chat-list").replaceChildren(el("p", { class: "hint", text: "Загрузка чатов…" }));
   $("#insp-thread").replaceChildren(el("div", { class: "placeholder" }, icon("chat", 28), el("p", { text: "Выбери чат слева, чтобы прочитать переписку." })));
   if (!dlg.open) dlg.showModal();
@@ -381,7 +417,8 @@ async function openUserChats(user) {
       return;
     }
     renderInspChatList(data.chats);
-    loadInspChat(data.chats[0].id, data.chats);
+    // на ПК сразу открываем последний чат, на телефоне сначала показываем полноэкранный список чатов
+    if (!isMobile()) loadInspChat(data.chats[0].id, data.chats);
   } catch (e) {
     toast(e.message, true);
   }
@@ -407,6 +444,9 @@ function renderInspChatList(chats) {
 
 async function loadInspChat(chatId, chats) {
   inspChatId = chatId;
+  const active = chats.find((c) => c.id === chatId);
+  $("#insp-current-title").textContent = active ? active.title : "";
+  $("#insp-body").dataset.mobileStep = "thread";
   renderInspChatList(chats);
   $("#insp-thread").replaceChildren(el("p", { class: "hint", text: "Загружаю сообщения…" }));
   try {
@@ -459,8 +499,8 @@ async function loadInspChat(chatId, chats) {
 
 async function addUser() {
   const r = await ask({
-    title: "Новый пользователь (Клодег)",
-    text: "У гостя автоматически откроется интерфейс «Клодег» с дефолтными лимитами (5 ч и неделя).",
+    title: "Новый пользователь (Claude)",
+    text: "У гостя автоматически откроется интерфейс Claude с дефолтными лимитами (5 ч и неделя).",
     ok: "Создать",
     fields: [
       { name: "username", label: "Логин" },

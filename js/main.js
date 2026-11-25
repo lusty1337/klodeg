@@ -1,10 +1,10 @@
-// точка входа: бренд (NeuroHub / Клодег), вход, экран бана и апелляции, условия, квоты и каркас
+// точка входа: бренд (NeuroHub / Claude), сворачиваемый сайдбар, меню профиля, вкладки настроек, бан и квоты
 import { api, auth, resolveApiBase } from "./api.js";
 import {
   $, $$, el, toast, fmtReset, fmtDateTime, hydrateIcons, setIcon, isMobile,
   CLAUDE_STARBURST_SVG, NEUROHUB_LOGO_SVG,
 } from "./ui.js";
-import { initChat, loadChats, newChat } from "./chat.js";
+import { initChat, loadChats, newChat, setChatRole } from "./chat.js";
 import { initAdmin, loadAdmin } from "./admin.js";
 import { initImage, loadImageMode } from "./image.js";
 import { initVoice, loadVoiceMode, stopCall } from "./voice.js";
@@ -12,40 +12,42 @@ import { initAgents, loadAgentsMode, stopArena } from "./agents.js";
 import { initYolo, stopYolo } from "./yolo.js";
 
 const TITLES = { chat: "Чат", image: "Картинки", voice: "Звонок", agents: "Агенты", yolo: "Зрение", admin: "Админка" };
-const state = { user: null, aiLocked: false, setupMode: false, mode: null, status: null, usage: null };
+const state = { user: null, aiLocked: false, setupMode: false, mode: null, status: null, usage: null, statusTimer: 0 };
 
 const FAVICON_NH =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%232e7d5b'/%3E%3Cpath d='M10.5 21.5v-11l11 11v-11' stroke='white' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E";
-const FAVICON_KLODEG = $("#favicon")?.getAttribute("href") || "";
+const FAVICON_CLAUDE = $("#favicon")?.getAttribute("href") || "";
 
 hydrateIcons();
 $$("[data-claude-mark]").forEach((n) => (n.innerHTML = CLAUDE_STARBURST_SVG));
 
 function defaultHostBrand() {
   const q = new URLSearchParams(location.search).get("brand");
-  if (q === "neurohub" || q === "klodeg") return q;
+  if (q === "neurohub" || q === "claude") return q;
+  if (q === "klodeg") return "claude";
   const isLocal = /^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(location.hostname) || !location.hostname;
-  return isLocal ? "neurohub" : "klodeg";
+  return isLocal ? "neurohub" : "claude";
 }
 
 function applyBrand(brand, persist = false) {
-  const isKlodeg = brand === "klodeg";
-  document.documentElement.dataset.brand = isKlodeg ? "klodeg" : "neurohub";
+  const isClaude = brand === "claude" || brand === "klodeg";
+  const key = isClaude ? "claude" : "neurohub";
+  document.documentElement.dataset.brand = key;
   if (persist) {
-    try { localStorage.setItem("nh_brand", isKlodeg ? "klodeg" : "neurohub"); } catch {}
+    try { localStorage.setItem("nh_brand", key); } catch {}
   }
-  const title = isKlodeg ? "Клодег" : "NeuroHub";
+  const title = isClaude ? "Claude" : "NeuroHub";
   document.title = title;
   const fav = $("#favicon");
-  if (fav) fav.setAttribute("href", isKlodeg ? FAVICON_KLODEG : FAVICON_NH);
-  $$("[data-brand-logo]").forEach((n) => (n.innerHTML = isKlodeg ? CLAUDE_STARBURST_SVG : NEUROHUB_LOGO_SVG));
+  if (fav) fav.setAttribute("href", isClaude ? FAVICON_CLAUDE : FAVICON_NH);
+  $$("[data-brand-logo]").forEach((n) => (n.innerHTML = isClaude ? CLAUDE_STARBURST_SVG : NEUROHUB_LOGO_SVG));
   $$("[data-brand-name]").forEach((n) => (n.textContent = title));
-  $("#hello-lead").textContent = isKlodeg ? "С возвращением" : "Привет";
-  $("#empty-sub").textContent = isKlodeg
+  $("#hello-lead").textContent = isClaude ? "С возвращением" : "Привет";
+  $("#empty-sub").textContent = isClaude
     ? "Чем могу помочь сегодня?"
     : "Чем займёмся? Можно приложить фото, PDF или код.";
-  $("#composer-hint").textContent = isKlodeg
-    ? "Клодег (Claude Fable 8) может ошибаться. Проверяйте важные ответы."
+  $("#composer-hint").textContent = isClaude
+    ? "Claude может ошибаться. Проверяйте важную информацию."
     : "ИИ работает без цензуры и может ошибаться";
 }
 
@@ -76,7 +78,7 @@ function fitViewport() {
 
 if (vv) {
   vv.addEventListener("resize", fitViewport);
-  // auteur-allow: RAW_SCROLL_LISTENER -- это не прокрутка страницы, а сдвиг visualViewport при открытой клавиатуре iOS; IntersectionObserver его не видит
+  // auteur-allow: RAW_SCROLL_LISTENER -- это сдвиг visualViewport при открытой клавиатуре iOS; IntersectionObserver его не видит
   vv.addEventListener("scroll", fitViewport);
 }
 window.addEventListener("resize", fitViewport);
@@ -93,24 +95,45 @@ document.addEventListener("focusout", () =>
 );
 fitViewport();
 
-// ---------------- тема ----------------
+// ---------------- тема (светлая / тёмная / системная с мягким переходом) ----------------
+function savedThemePref() {
+  const t = localStorage.getItem("nh_theme");
+  return t === "light" || t === "dark" ? t : "system";
+}
 function effectiveTheme() {
   const t = document.documentElement.dataset.theme;
-  if (t) return t;
+  if (t === "light" || t === "dark") return t;
   return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
-function syncThemeIcon() {
+function syncThemeControls() {
+  const pref = savedThemePref();
   setIcon($("#btn-theme"), effectiveTheme() === "dark" ? "sun" : "moon");
+  $$("[data-theme-val]").forEach((btn) => {
+    btn.setAttribute("aria-pressed", String(btn.dataset.themeVal === pref));
+  });
+}
+function setThemePref(pref) {
+  const root = document.documentElement;
+  root.classList.add("theme-switching");
+  if (pref === "light" || pref === "dark") {
+    root.dataset.theme = pref;
+    try { localStorage.setItem("nh_theme", pref); } catch {}
+  } else {
+    delete root.dataset.theme;
+    try { localStorage.removeItem("nh_theme"); } catch {}
+  }
+  syncThemeControls();
+  setTimeout(() => root.classList.remove("theme-switching"), 240);
 }
 $("#btn-theme").addEventListener("click", () => {
-  const next = effectiveTheme() === "dark" ? "light" : "dark";
-  document.documentElement.dataset.theme = next;
-  try { localStorage.setItem("nh_theme", next); } catch {}
-  syncThemeIcon();
+  setThemePref(effectiveTheme() === "dark" ? "light" : "dark");
 });
-syncThemeIcon();
+$$("[data-theme-val]").forEach((btn) => {
+  btn.addEventListener("click", () => setThemePref(btn.dataset.themeVal));
+});
+syncThemeControls();
 
-// ---------------- боковая панель на телефоне ----------------
+// ---------------- боковая панель (мобильная шторка + десктопное сворачивание как в claude.ai) ----------------
 export function openSidebar() {
   $("#sidebar").classList.add("open");
   $("#scrim").classList.add("show");
@@ -119,10 +142,20 @@ export function closeSidebar() {
   $("#sidebar").classList.remove("open");
   $("#scrim").classList.remove("show");
 }
+function setDesktopCollapsed(collapsed) {
+  $("#app").classList.toggle("sidebar-collapsed", collapsed);
+  $("#btn-expand-sidebar").classList.toggle("hidden", !collapsed);
+  try { localStorage.setItem("nh_side_collapsed", collapsed ? "1" : "0"); } catch {}
+}
 $("#btn-menu").addEventListener("click", openSidebar);
 $("#btn-close-sidebar").addEventListener("click", closeSidebar);
 $("#scrim").addEventListener("click", closeSidebar);
 $("#btn-new-chat-top").addEventListener("click", () => newChat());
+$("#btn-collapse-sidebar").addEventListener("click", () => setDesktopCollapsed(true));
+$("#btn-expand-sidebar").addEventListener("click", () => setDesktopCollapsed(false));
+if (localStorage.getItem("nh_side_collapsed") === "1" && !isMobile()) {
+  setDesktopCollapsed(true);
+}
 
 let touchX = null;
 $("#sidebar").addEventListener("touchstart", (e) => (touchX = e.touches[0].clientX), { passive: true });
@@ -131,15 +164,55 @@ $("#sidebar").addEventListener("touchend", (e) => {
   touchX = null;
 });
 
+// ---------------- всплывающие меню (профиль Claude и выбор модели) ----------------
+const accPop = $("#account-popover");
+const accBtn = $("#btn-account-menu");
+const modPop = $("#model-popover");
+const modBtn = $("#btn-model-picker");
+
+function closePopovers() {
+  accPop?.classList.add("hidden");
+  accBtn?.setAttribute("aria-expanded", "false");
+  modPop?.classList.add("hidden");
+  modBtn?.setAttribute("aria-expanded", "false");
+}
+
+accBtn?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const willOpen = accPop.classList.contains("hidden");
+  closePopovers();
+  if (willOpen) {
+    accPop.classList.remove("hidden");
+    accBtn.setAttribute("aria-expanded", "true");
+  }
+});
+
+modBtn?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const willOpen = modPop.classList.contains("hidden");
+  closePopovers();
+  if (willOpen) {
+    modPop.classList.remove("hidden");
+    modBtn.setAttribute("aria-expanded", "true");
+  }
+});
+
+accPop?.addEventListener("click", (e) => e.stopPropagation());
+modPop?.addEventListener("click", (e) => e.stopPropagation());
+document.addEventListener("click", closePopovers);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closePopovers();
+});
+
 // ---------------- условия использования ----------------
 const tosDlg = $("#tos-dialog");
 let tosGateMode = false;
 
 function openTos({ gate = false } = {}) {
+  closePopovers();
   tosGateMode = gate;
-  $("#tos-title").textContent = gate ? "Добро пожаловать в Клодег" : "Условия использования";
+  $("#tos-title").textContent = gate ? "Добро пожаловать в Claude" : "Условия использования";
   $("#tos-intro").classList.toggle("hidden", !gate);
-  // в режиме просмотра текст открыт сразу, а при первом входе раскрывается кликом по ссылке в плашке
   $("#tos-document").classList.toggle("hidden", gate);
   $("#tos-close-x").classList.toggle("hidden", gate);
   $("#tos-actions-gate").classList.toggle("hidden", !gate);
@@ -171,6 +244,7 @@ $("#tos-accept-btn").addEventListener("click", async () => {
   }
 });
 $("#btn-open-tos").addEventListener("click", () => openTos({ gate: false }));
+$("#pop-tos")?.addEventListener("click", () => openTos({ gate: false }));
 $("#auth-tos-link").addEventListener("click", () => openTos({ gate: false }));
 $("#ban-tos-link").addEventListener("click", () => openTos({ gate: false }));
 
@@ -190,7 +264,7 @@ function setBanSubstate(mode) {
 }
 
 function showBanScreen(user) {
-  applyBrand("klodeg", true);
+  applyBrand("claude", true);
   $("#auth").classList.add("hidden");
   $("#app").classList.add("hidden");
   $("#ban-screen").classList.remove("hidden");
@@ -258,6 +332,7 @@ function logout() {
 }
 
 $("#btn-logout").addEventListener("click", logout);
+$("#pop-logout")?.addEventListener("click", logout);
 $("#btn-ban-logout").addEventListener("click", logout);
 
 // ---------------- вход ----------------
@@ -266,11 +341,11 @@ function showAuth(setup, offline = false) {
   $("#app").classList.add("hidden");
   $("#ban-screen").classList.add("hidden");
   $("#auth").classList.remove("hidden");
-  const isKlodeg = document.documentElement.dataset.brand === "klodeg";
+  const isClaude = document.documentElement.dataset.brand === "claude";
   $("#auth-hint").textContent = setup
     ? "Первый запуск: придумай логин и пароль администратора."
-    : (isKlodeg ? "Войдите в аккаунт Antonchik" : "Вход в локальный ИИ-хаб");
-  $("#auth-submit").textContent = setup ? "Создать администратора" : "Войти";
+    : (isClaude ? "Войдите в аккаунт Anthropic" : "Вход в локальный ИИ-хаб");
+  $("#auth-submit").textContent = setup ? "Создать администратора" : (isClaude ? "Продолжить" : "Войти");
   $("#auth-offline").classList.toggle("hidden", !offline);
 }
 
@@ -330,7 +405,8 @@ async function enterApp() {
   }
 
   const isAdmin = state.user.role === "admin";
-  applyBrand(isAdmin ? "neurohub" : "klodeg", true);
+  setChatRole(state.user.role);
+  applyBrand(isAdmin ? "neurohub" : "claude", true);
 
   $("#auth").classList.add("hidden");
   $("#ban-screen").classList.add("hidden");
@@ -338,21 +414,30 @@ async function enterApp() {
 
   $$("[data-perm]").forEach((b) => b.classList.toggle("hidden", !state.user.perms[b.dataset.perm]));
   $$("[data-admin]").forEach((b) => b.classList.toggle("hidden", !isAdmin));
+
+  // в режиме Claude скрываем панель режимов NeuroHub, если у гостя нет спец-доступов (картинки/звонок/зрение)
+  const hasExtraModes = isAdmin || state.user.perms.image || state.user.perms.voice || state.user.perms.yolo;
+  $("#modes-nav").classList.toggle("hidden", !hasExtraModes);
+
+  const initial = state.user.username.slice(0, 1).toUpperCase();
   $("#profile-name").textContent = state.user.username;
   $("#profile-role").textContent = isAdmin ? "администратор" : "Claude Fable 8";
-  $("#avatar").textContent = state.user.username.slice(0, 1).toUpperCase();
+  $("#avatar").textContent = initial;
+  $("#profile-name-claude").textContent = state.user.username;
+  $("#avatar-claude").textContent = initial;
+  $("#pop-username").textContent = state.user.username;
   $("#hello-name").textContent = `, ${state.user.username}`;
   updateUsage(data.usage);
   updateLock(data.ai_locked);
 
   let start = (location.hash || "").slice(1) || localStorage.getItem("nh_mode") || "chat";
   const btn = $(`.mode-btn[data-mode="${start}"]`);
-  if (!btn || btn.classList.contains("hidden")) start = "chat";
+  if (!btn || btn.classList.contains("hidden") || !hasExtraModes) start = "chat";
   setMode(start);
   await loadChats();
   refreshStatus();
 
-  if (isAdmin) refreshAppealsBadge();
+  if (isAdmin && start !== "admin") refreshAppealsBadge();
   if (!isAdmin && !state.user.tos_accepted) {
     openTos({ gate: true });
   }
@@ -374,6 +459,7 @@ export function setMode(mode) {
   if (state.mode === "agents") stopArena();
   if (state.mode === "yolo") stopYolo();
   closeSidebar();
+  closePopovers();
 
   state.mode = mode;
   try { localStorage.setItem("nh_mode", mode); } catch {}
@@ -411,18 +497,50 @@ function quotaFillClass(pct) {
   return "quota-fill";
 }
 
-function buildQuotaRow(title, pct, resetText) {
-  const fill = el("div", { class: quotaFillClass(pct), style: `width:${Math.min(100, pct)}%` });
-  return el(
-    "div",
-    { class: "quota-row" },
-    el("div", { class: "quota-meta" }, el("span", { text: title }), el("span", { text: resetText ? `${pct}% · ${resetText}` : `${pct}%` })),
-    el("div", { class: "quota-track" }, fill)
-  );
+function renderUsageSettingsCard(u) {
+  const host = $("#settings-usage-card");
+  if (!host) return;
+  if (state.user?.role === "admin" || !u || (u.limit_5h == null && u.limit_week == null)) {
+    host.replaceChildren(el("p", { class: "hint", text: "Для этого аккаунта лимиты использования не ограничены." }));
+    return;
+  }
+  const rows = [];
+  if (u.limit_5h != null) {
+    rows.push(
+      el(
+        "div",
+        { class: "usage-item" },
+        el(
+          "div",
+          { class: "usage-item-head" },
+          el("div", {}, el("strong", { text: "Текущая сессия" }), el("span", { class: "hint", text: u.reset_5h ? `Сбросится ${fmtReset(u.reset_5h, false)}` : "Окно 5 часов ещё не начато" })),
+          el("span", { class: "usage-pct", text: `${u.pct_5h}% использовано` })
+        ),
+        el("div", { class: "quota-track lg" }, el("div", { class: quotaFillClass(u.pct_5h), style: `width:${Math.min(100, u.pct_5h)}%` }))
+      )
+    );
+  }
+  if (u.limit_week != null) {
+    rows.push(
+      el(
+        "div",
+        { class: "usage-item" },
+        el(
+          "div",
+          { class: "usage-item-head" },
+          el("div", {}, el("strong", { text: "Все модели (неделя)" }), el("span", { class: "hint", text: u.reset_week ? `Сбросится в ${fmtReset(u.reset_week, true)}` : "Недельное окно ещё не начато" })),
+          el("span", { class: "usage-pct", text: `${u.pct_week}% использовано` })
+        ),
+        el("div", { class: "quota-track lg" }, el("div", { class: quotaFillClass(u.pct_week), style: `width:${Math.min(100, u.pct_week)}%` }))
+      )
+    );
+  }
+  host.replaceChildren(...rows);
 }
 
 function updateUsage(u) {
   state.usage = u;
+  renderUsageSettingsCard(u);
   const box = $("#quota-box");
   const banner = $("#quota-banner");
   const isAdmin = state.user?.role === "admin";
@@ -454,7 +572,7 @@ function updateUsage(u) {
   }
 
   if (u.blocked_by === "week") {
-    banner.textContent = `Недельный лимит исчерпан. Доступ восстановится ${fmtReset(u.reset_week, true)}.`;
+    banner.textContent = `Недельный лимит исчерпан. Доступ восстановится в ${fmtReset(u.reset_week, true)}.`;
     banner.classList.remove("hidden");
   } else if (u.blocked_by === "5h") {
     banner.textContent = `Лимит на 5 часов исчерпан. Доступ восстановится ${fmtReset(u.reset_5h, false)}.`;
@@ -482,47 +600,75 @@ const STATE_TEXT = {
 };
 
 const INPUT_HINT = {
-  ready: "Напишите сообщение…",
+  ready: "Чем могу помочь сегодня?",
   loading: "Модель загружается, можно писать…",
   paused: "Сервер занят, напишите чуть позже…",
-  offline_managed: "Модель спит, проснётся за минуту…",
+  offline_managed: "Напишите сообщение — модель проснётся сама…",
   offline: "Сервер модели выключен…",
 };
 
+function scheduleStatusPoll(isLoading) {
+  clearTimeout(state.statusTimer);
+  // в обычном режиме опрашиваем реже (15 с), чтобы не гонять лишние запросы через туннель
+  state.statusTimer = window.setTimeout(() => {
+    if (state.user && state.user.ban_status === "active" && !document.hidden) refreshStatus();
+    else scheduleStatusPoll(false);
+  }, isLoading ? 3500 : 15000);
+}
+
 async function refreshStatus() {
+  let isLoading = false;
   try {
     const s = await api("/api/status");
     state.status = s;
     let key = s.llm_state;
     if (s.llm_paused) key = "paused";
     else if (key === "offline" && s.llm_managed) key = "offline_managed";
+    isLoading = key === "loading";
     const [cls, text] = STATE_TEXT[key] || STATE_TEXT.offline;
-    const isKlodeg = document.documentElement.dataset.brand === "klodeg";
-    const modelLabel = isKlodeg ? "Claude Fable 8" : (s.model || "");
+    const isClaude = document.documentElement.dataset.brand === "claude";
+    const modelLabel = isClaude ? "Claude Fable 8" : (s.model || "");
     const pill = $("#model-pill");
     pill.querySelector(".dot").className = `dot ${cls}`;
-    pill.querySelector(".model-pill-text").textContent = text;
+    pill.querySelector(".model-pill-text").textContent = isClaude && key === "ready" ? "Claude Fable 8" : text;
     pill.title = modelLabel;
     const sub = $("#topbar-sub");
     sub.querySelector(".dot").className = `dot ${cls}`;
-    sub.querySelector("span").textContent = text;
+    sub.querySelector("span").textContent = isClaude && key === "ready" ? "Claude Fable 8" : text;
     sub.title = modelLabel;
     $("#input").placeholder = INPUT_HINT[key] || INPUT_HINT.ready;
     updateLock(s.ai_locked);
     window.dispatchEvent(new CustomEvent("nh:status", { detail: s }));
   } catch {}
+  scheduleStatusPoll(isLoading);
 }
-setInterval(() => {
-  if (state.user && state.user.ban_status === "active" && !document.hidden) refreshStatus();
-}, 5000);
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden && state.user && state.user.ban_status === "active") refreshStatus();
 });
 window.addEventListener("nh:refresh-status", refreshStatus);
 
-// ---------------- настройки ----------------
+// ---------------- настройки с вкладками в стиле claude.ai ----------------
 const dlg = $("#settings-dialog");
-$("#btn-settings").addEventListener("click", () => {
+
+function selectSettingsTab(tab) {
+  $$(".settings-tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
+  $$(".settings-panel").forEach((p) => {
+    const match = p.dataset.panel === tab;
+    p.classList.toggle("hidden", !match);
+    if (match) {
+      p.classList.remove("panel-enter");
+      void p.offsetWidth;
+      p.classList.add("panel-enter");
+    }
+  });
+}
+
+$$(".settings-tab").forEach((b) => {
+  b.addEventListener("click", () => selectSettingsTab(b.dataset.tab));
+});
+
+function openSettings(tab = "general") {
+  closePopovers();
   const f = $("#settings-form");
   f.about_me.value = state.user.about_me || "";
   f.instructions.value = state.user.instructions || "";
@@ -531,22 +677,16 @@ $("#btn-settings").addEventListener("click", () => {
   f.old_password.value = f.new_password.value = "";
   f.api_url.value = localStorage.getItem("nh_api") || "";
   $("#settings-error").textContent = "";
-
-  const sq = $("#settings-quota");
-  const u = state.usage;
-  if (state.user.role !== "admin" && u && (u.limit_5h != null || u.limit_week != null)) {
-    const rows = [];
-    if (u.limit_5h != null) rows.push(buildQuotaRow("Сессия (5 часов)", u.pct_5h, u.reset_5h ? `сброс ${fmtReset(u.reset_5h, false)}` : "свободно"));
-    if (u.limit_week != null) rows.push(buildQuotaRow("Недельное окно", u.pct_week, u.reset_week ? `сброс ${fmtReset(u.reset_week, true)}` : "свободно"));
-    $("#settings-quota-rows").replaceChildren(...rows);
-    sq.classList.remove("hidden");
-  } else {
-    sq.classList.add("hidden");
-  }
-
+  renderUsageSettingsCard(state.usage);
+  syncThemeControls();
+  selectSettingsTab(tab);
   if (isMobile()) closeSidebar();
-  dlg.showModal();
-});
+  if (!dlg.open) dlg.showModal();
+}
+
+$("#btn-settings").addEventListener("click", () => openSettings("general"));
+$("#pop-settings")?.addEventListener("click", () => openSettings("general"));
+$("#pop-usage")?.addEventListener("click", () => openSettings("usage"));
 
 $("#btn-analyze-style").addEventListener("click", async () => {
   const btn = $("#btn-analyze-style");

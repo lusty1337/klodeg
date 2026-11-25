@@ -1,4 +1,4 @@
-// обёртка над API бэкенда: динамический адрес туннеля, токен, JSON, файлы, SSE-стрим
+// обёртка над API бэкенда: динамический адрес туннеля, токен, JSON, файлы, SSE-стрим и переподключение
 let currentBase = (window.NEUROHUB_API || "").replace(/\/$/, "");
 let resolvedOnce = false;
 
@@ -87,18 +87,35 @@ function headers(extra = {}) {
   return h;
 }
 
+function looksLikeStaleTunnel(res) {
+  if (res.status === 502 || res.status === 503 || res.status === 504) return true;
+  // закрытый туннель localhost.run возвращает 404 с HTML/текстом, а не JSON нашего FastAPI
+  if (res.status === 404 && !(res.headers.get("content-type") || "").includes("application/json")) return true;
+  return false;
+}
+
+async function refreshTunnelAndRetry(path, init) {
+  if (!window.NEUROHUB_ENDPOINT_JSON || localStorage.getItem("nh_api")) return null;
+  const prev = currentBase;
+  await resolveApiBase(true);
+  if (currentBase && currentBase !== prev) {
+    return fetch(currentBase + path, init);
+  }
+  return null;
+}
+
 async function fetchWithRetry(path, init) {
   try {
-    return await fetch(currentBase + path, init);
-  } catch (err) {
-    // если туннель сменил адрес во время работы, подтягиваем свежий URL из Gist и повторяем раз
-    if (window.NEUROHUB_ENDPOINT_JSON && !localStorage.getItem("nh_api")) {
-      const prev = currentBase;
-      await resolveApiBase(true);
-      if (currentBase && currentBase !== prev) {
-        return fetch(currentBase + path, init);
-      }
+    const res = await fetch(currentBase + path, init);
+    if (looksLikeStaleTunnel(res)) {
+      const retried = await refreshTunnelAndRetry(path, init);
+      if (retried) return retried;
     }
+    return res;
+  } catch (err) {
+    if (err.name === "AbortError") throw err;
+    const retried = await refreshTunnelAndRetry(path, init);
+    if (retried) return retried;
     throw err;
   }
 }
@@ -122,7 +139,7 @@ export async function upload(file, path = "/api/upload") {
 const blobCache = new Map();
 export async function fileUrl(id) {
   if (blobCache.has(id)) return blobCache.get(id);
-  const res = await fetch(`${currentBase}/api/files/${id}`, { headers: headers() });
+  const res = await fetchWithRetry(`/api/files/${id}`, { headers: headers() });
   if (!res.ok) throw new ApiError(res.status, "Файл недоступен");
   const url = URL.createObjectURL(await res.blob());
   blobCache.set(id, url);
@@ -136,14 +153,7 @@ export function wsUrl(path) {
   return `${base}${path}${path.includes("?") ? "&" : "?"}token=${encodeURIComponent(auth.token || "")}`;
 }
 
-export async function stream(path, body, onEvent, signal) {
-  const res = await fetchWithRetry(path, {
-    method: "POST",
-    headers: headers({ "Content-Type": "application/json" }),
-    body: JSON.stringify(body),
-    signal,
-  });
-  if (!res.ok) return handle(res);
+async function readSse(res, onEvent) {
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buf = "";
@@ -168,4 +178,25 @@ export async function stream(path, body, onEvent, signal) {
     }
   }
   if (buf.trim()) flush(buf);
+}
+
+export async function stream(path, body, onEvent, signal) {
+  const res = await fetchWithRetry(path, {
+    method: "POST",
+    headers: headers({ "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!res.ok) return handle(res);
+  await readSse(res, onEvent);
+}
+
+export async function streamGet(path, onEvent, signal) {
+  const res = await fetchWithRetry(path, {
+    method: "GET",
+    headers: headers(),
+    signal,
+  });
+  if (!res.ok) return handle(res);
+  await readSse(res, onEvent);
 }

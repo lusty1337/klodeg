@@ -5,12 +5,12 @@
   <!-- maximum-scale=1: iOS не увеличивает страницу при касании поля; щипком масштабировать по-прежнему можно -->
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="theme-color" content="#faf9f5" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#1f1e1d" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#262624" media="(prefers-color-scheme: dark)">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Клодег">
-  <title>Клодег</title>
+  <meta name="apple-mobile-web-app-title" content="Claude">
+  <title>Claude</title>
   <link id="favicon" rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23D97757' d='m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -21,11 +21,12 @@
     // тема и бренд до первой отрисовки, чтобы интерфейс не мигал
     try {
       const t = localStorage.getItem("nh_theme");
-      if (t) document.documentElement.dataset.theme = t;
+      if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
       const q = new URLSearchParams(location.search).get("brand");
       const isLocal = /^(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(location.hostname) || !location.hostname;
-      const saved = localStorage.getItem("nh_brand");
-      const brand = (q === "neurohub" || q === "klodeg") ? q : (saved || (isLocal ? "neurohub" : "klodeg"));
+      let saved = localStorage.getItem("nh_brand");
+      if (saved === "klodeg") saved = "claude";
+      const brand = (q === "neurohub" || q === "claude") ? q : (saved || (isLocal ? "neurohub" : "claude"));
       document.documentElement.dataset.brand = brand;
     } catch {}
   </script>
@@ -41,27 +42,27 @@
     <form id="auth-form" class="auth-card" autocomplete="on">
       <div class="auth-brand">
         <div class="logo big" data-brand-logo aria-hidden="true"></div>
-        <h1 class="auth-title" data-brand-name>Клодег</h1>
+        <h1 class="auth-title" data-brand-name>Claude</h1>
       </div>
-      <p id="auth-hint" class="muted">Войдите в аккаунт Antonchik</p>
-      <label class="field">Логин<input name="username" required minlength="2" maxlength="32" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
-      <label class="field">Пароль<input name="password" type="password" required minlength="4" autocomplete="current-password"></label>
-      <button class="btn primary block" type="submit" id="auth-submit">Войти</button>
+      <p id="auth-hint" class="muted">Войдите в аккаунт Anthropic</p>
+      <label class="field">Логин<input name="username" required minlength="2" maxlength="32" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Введите логин"></label>
+      <label class="field">Пароль<input name="password" type="password" required minlength="4" autocomplete="current-password" placeholder="Введите пароль"></label>
+      <button class="btn primary block" type="submit" id="auth-submit">Продолжить</button>
       <p id="auth-error" class="form-error" role="alert"></p>
       <div id="auth-offline" class="offline-box hidden">
         <p class="hint">Сервер сейчас выключен или недоступен. Попробуйте чуть позже.</p>
         <button class="btn block" type="button" id="auth-retry">Проверить снова</button>
       </div>
-      <p class="auth-legal only-klodeg">Продолжая, вы соглашаетесь с <button type="button" class="link-btn" id="auth-tos-link">Условиями использования</button> Antonchik.</p>
+      <p class="auth-legal only-claude">Продолжая, вы соглашаетесь с <button type="button" class="link-btn" id="auth-tos-link">Условиями использования</button> Anthropic.</p>
     </form>
   </section>
 
-  <!-- Экран приостановки аккаунта в стиле Claude -->
+  <!-- Экран приостановки аккаунта 1 в 1 с Claude -->
   <section id="ban-screen" class="ban-screen hidden" aria-live="polite">
     <div class="ban-wrap">
       <div class="ban-brand">
         <span class="ban-mark" data-claude-mark aria-hidden="true"></span>
-        <span class="ban-wordmark">Клодег</span>
+        <span class="ban-wordmark">Claude</span>
       </div>
 
       <h1 class="ban-title" id="ban-title">Ваш аккаунт приостановлен</h1>
@@ -153,7 +154,7 @@
       <button class="ban-logout" type="button" id="btn-ban-logout">Выйти</button>
 
       <p class="ban-legal">
-        Чтобы узнать больше об использовании Клодега, ознакомьтесь с нашими
+        Чтобы узнать больше об использовании Claude, ознакомьтесь с нашими
         <button type="button" class="link-btn" id="ban-tos-link">Условиями использования</button>.
       </p>
     </div>
@@ -162,21 +163,29 @@
   <div id="app" class="app hidden">
     <div id="scrim" class="scrim"></div>
 
-    <!-- Боковая панель. На телефоне выезжает слева -->
+    <!-- Боковая панель: сворачивается на ПК (как в claude.ai) и выезжает на телефоне -->
     <aside class="sidebar" id="sidebar" aria-label="Навигация">
       <div class="side-head">
         <div class="brand">
           <div class="logo" data-brand-logo aria-hidden="true"></div>
-          <span data-brand-name>Клодег</span>
+          <span data-brand-name>Claude</span>
         </div>
+        <button class="icon-btn only-desktop" id="btn-collapse-sidebar" aria-label="Свернуть панель" title="Свернуть боковую панель"><span data-icon="sidebar" data-size="18"></span></button>
         <button class="icon-btn only-mobile" id="btn-close-sidebar" aria-label="Закрыть меню"><span data-icon="close"></span></button>
       </div>
 
-      <nav class="modes" aria-label="Режимы">
+      <!-- Кнопка "Новый чат" в фирменном стиле claude.ai -->
+      <button type="button" class="claude-new-chat only-claude" id="btn-claude-new-chat">
+        <span class="claude-new-ico" aria-hidden="true"><span data-icon="plus" data-size="15"></span></span>
+        <span>Новый чат</span>
+      </button>
+
+      <!-- Режимы NeuroHub: для обычных гостей Claude скрыты -->
+      <nav class="modes" id="modes-nav" aria-label="Режимы">
         <button class="mode-btn" data-mode="chat"><span data-icon="chat" data-size="20"></span><span>Чат</span></button>
         <button class="mode-btn" data-mode="image" data-perm="image"><span data-icon="image" data-size="20"></span><span>Картинки</span></button>
         <button class="mode-btn" data-mode="voice" data-perm="voice"><span data-icon="phone" data-size="20"></span><span>Звонок</span></button>
-        <button class="mode-btn" data-mode="agents"><span data-icon="users" data-size="20"></span><span>Агенты</span></button>
+        <button class="mode-btn" data-mode="agents" data-admin><span data-icon="users" data-size="20"></span><span>Агенты</span></button>
         <button class="mode-btn" data-mode="yolo" data-perm="yolo"><span data-icon="eye" data-size="20"></span><span>Зрение</span></button>
         <button class="mode-btn" data-mode="admin" data-admin><span data-icon="shield" data-size="20"></span><span>Админка</span><span class="nav-badge hidden" id="admin-appeals-badge">0</span></button>
       </nav>
@@ -184,10 +193,10 @@
       <div class="chats-block" id="chats-block">
         <div class="chats-tools">
           <label class="search-box embed">
-            <span data-icon="search" data-size="16"></span>
+            <span data-icon="search" data-size="15"></span>
             <input id="chat-search" type="search" placeholder="Поиск по чатам…" aria-label="Поиск по чатам" autocomplete="off">
           </label>
-          <button class="icon-btn accent" id="btn-new-chat" aria-label="Новый чат" title="Новый чат"><span data-icon="edit"></span></button>
+          <button class="icon-btn accent only-neurohub" id="btn-new-chat" aria-label="Новый чат" title="Новый чат"><span data-icon="edit"></span></button>
         </div>
         <ul id="chat-list" class="chat-list"></ul>
       </div>
@@ -198,7 +207,7 @@
         </div>
         <div class="quota-box hidden" id="quota-box">
           <div class="quota-row" id="quota-row-5h">
-            <div class="quota-meta"><span>Сессия 5 ч</span><span id="q-5h-label">0%</span></div>
+            <div class="quota-meta"><span>Текущая сессия</span><span id="q-5h-label">0%</span></div>
             <div class="quota-track"><div class="quota-fill" id="q-5h-fill"></div></div>
           </div>
           <div class="quota-row" id="quota-row-week">
@@ -206,12 +215,46 @@
             <div class="quota-track"><div class="quota-fill" id="q-week-fill"></div></div>
           </div>
         </div>
-        <div class="profile">
-          <div class="avatar" id="avatar">?</div>
-          <div class="profile-name"><strong id="profile-name"></strong><span id="profile-role"></span></div>
-          <button class="icon-btn" id="btn-theme" aria-label="Сменить тему" title="Тема"><span data-icon="moon"></span></button>
-          <button class="icon-btn" id="btn-settings" aria-label="Настройки" title="Настройки"><span data-icon="settings"></span></button>
-          <button class="icon-btn" id="btn-logout" aria-label="Выйти" title="Выйти"><span data-icon="logout"></span></button>
+
+        <!-- Всплывающее меню профиля в стиле claude.ai (для Claude) -->
+        <div class="account-wrap">
+          <div id="account-popover" class="account-popover hidden" role="menu">
+            <div class="pop-head">
+              <strong id="pop-username"></strong>
+              <span class="hint">План Pro · Claude Fable 8</span>
+            </div>
+            <div class="pop-sep"></div>
+            <button type="button" class="pop-item" id="pop-settings" role="menuitem"><span data-icon="settings" data-size="16"></span><span>Настройки</span></button>
+            <button type="button" class="pop-item" id="pop-usage" role="menuitem"><span data-icon="gauge" data-size="16"></span><span>Использование</span></button>
+            <button type="button" class="pop-item" id="pop-tos" role="menuitem"><span data-icon="file" data-size="16"></span><span>Условия использования</span></button>
+            <div class="pop-theme-row">
+              <span class="pop-theme-label">Тема</span>
+              <div class="theme-pills" id="pop-theme-pills" role="radiogroup" aria-label="Оформление">
+                <button type="button" data-theme-val="light" aria-label="Светлая тема" title="Светлая"><span data-icon="sun" data-size="14"></span></button>
+                <button type="button" data-theme-val="dark" aria-label="Тёмная тема" title="Тёмная"><span data-icon="moon" data-size="14"></span></button>
+                <button type="button" data-theme-val="system" aria-label="Системная тема" title="Как в системе"><span data-icon="monitor" data-size="14"></span></button>
+              </div>
+            </div>
+            <div class="pop-sep"></div>
+            <button type="button" class="pop-item danger" id="pop-logout" role="menuitem"><span data-icon="logout" data-size="16"></span><span>Выйти</span></button>
+          </div>
+
+          <button type="button" class="profile-trigger only-claude" id="btn-account-menu" aria-haspopup="menu" aria-expanded="false">
+            <div class="avatar" id="avatar-claude">?</div>
+            <div class="profile-name">
+              <strong id="profile-name-claude"></strong>
+              <span>План Pro</span>
+            </div>
+            <span class="profile-chev" data-icon="chevrons" data-size="16"></span>
+          </button>
+
+          <div class="profile only-neurohub">
+            <div class="avatar" id="avatar">?</div>
+            <div class="profile-name"><strong id="profile-name"></strong><span id="profile-role"></span></div>
+            <button class="icon-btn" id="btn-theme" aria-label="Сменить тему" title="Тема"><span data-icon="moon"></span></button>
+            <button class="icon-btn" id="btn-settings" aria-label="Настройки" title="Настройки"><span data-icon="settings"></span></button>
+            <button class="icon-btn" id="btn-logout" aria-label="Выйти" title="Выйти"><span data-icon="logout"></span></button>
+          </div>
         </div>
       </div>
     </aside>
@@ -219,6 +262,7 @@
     <main class="main">
       <header class="topbar">
         <button class="icon-btn only-mobile" id="btn-menu" aria-label="Открыть меню"><span data-icon="menu" data-size="22"></span></button>
+        <button class="icon-btn sidebar-reopen hidden" id="btn-expand-sidebar" aria-label="Открыть боковую панель" title="Открыть боковую панель"><span data-icon="sidebar" data-size="18"></span></button>
         <div class="topbar-titles">
           <h1 class="topbar-title" id="topbar-title">Чат</h1>
           <span class="topbar-sub" id="topbar-sub"><i class="dot"></i><span></span></span>
@@ -235,9 +279,9 @@
           <div class="thread" id="thread"></div>
           <div class="thread-end" id="thread-end" aria-hidden="true"></div>
           <div class="empty-chat" id="empty-chat">
-            <div class="hello-mark only-klodeg" data-claude-mark aria-hidden="true"></div>
-            <h2 class="hello"><span id="hello-lead">Привет</span><span id="hello-name"></span></h2>
-            <p class="muted" id="empty-sub">Чем займёмся? Можно приложить фото, PDF или код.</p>
+            <div class="hello-mark only-claude" data-claude-mark aria-hidden="true"></div>
+            <h2 class="hello"><span id="hello-lead">С возвращением</span><span id="hello-name"></span></h2>
+            <p class="muted" id="empty-sub">Чем могу помочь сегодня?</p>
             <div class="suggestions" id="suggestions"></div>
           </div>
         </div>
@@ -246,18 +290,40 @@
           <div class="quota-banner hidden" id="quota-banner" role="status"></div>
           <div class="composer-box embed" id="composer-box">
             <div class="att-row" id="att-row"></div>
-            <textarea id="input" rows="1" placeholder="Напиши сообщение…" aria-label="Сообщение" enterkeyhint="send"></textarea>
+            <textarea id="input" rows="1" placeholder="Чем могу помочь сегодня?" aria-label="Сообщение" enterkeyhint="send"></textarea>
             <div class="composer-bar">
-              <button type="button" class="icon-btn" id="btn-attach" aria-label="Прикрепить файл" title="Фото, PDF, документ, код"><span data-icon="paperclip" data-size="20"></span></button>
+              <button type="button" class="icon-btn" id="btn-attach" aria-label="Прикрепить файл" title="Фото, PDF, документ, код"><span data-icon="paperclip" data-size="19"></span></button>
               <input type="file" id="file-input" multiple hidden>
-              <button type="button" class="chip" id="btn-web" aria-pressed="false" title="Искать в интернете"><span data-icon="globe" data-size="16"></span><span>Поиск</span></button>
-              <button type="button" class="chip" id="btn-think" aria-pressed="true" title="Размышлять перед ответом: умнее, но дольше"><span data-icon="brain" data-size="16"></span><span>Думать</span></button>
+              <button type="button" class="chip" id="btn-web" aria-pressed="false" title="Искать в интернете"><span data-icon="globe" data-size="15"></span><span>Поиск</span></button>
+              <button type="button" class="chip" id="btn-think" aria-pressed="false" title="Глубокие размышления перед ответом (до ~25 с)"><span data-icon="brain" data-size="15"></span><span>Думать</span></button>
               <span class="grow"></span>
-              <span class="model-tag only-klodeg" title="Antonchik · Claude Fable 8">Claude Fable 8</span>
-              <button type="submit" class="send-btn" id="btn-send" aria-label="Отправить"><span data-icon="arrowUp" data-size="20"></span></button>
+              <div class="model-picker-wrap only-claude">
+                <button type="button" class="model-pill-btn" id="btn-model-picker" aria-haspopup="true" aria-expanded="false">
+                  <span>Claude Fable 8</span>
+                  <span data-icon="chevronDown" data-size="14"></span>
+                </button>
+                <div class="model-popover hidden" id="model-popover" role="menu">
+                  <div class="model-opt active">
+                    <div>
+                      <strong>Claude Fable 8</strong>
+                      <p>Флагманская модель Anthropic для сложных задач, кода и диалогов</p>
+                    </div>
+                    <span data-icon="check" data-size="16"></span>
+                  </div>
+                  <div class="pop-sep"></div>
+                  <label class="model-think-row">
+                    <div>
+                      <strong>Глубокое мышление</strong>
+                      <span>Обдумывает сложные задачи перед ответом</span>
+                    </div>
+                    <span class="switch mini"><input type="checkbox" id="model-pop-think"><span></span></span>
+                  </label>
+                </div>
+              </div>
+              <button type="submit" class="send-btn" id="btn-send" aria-label="Отправить"><span data-icon="arrowUp" data-size="19"></span></button>
             </div>
           </div>
-          <p class="composer-hint" id="composer-hint">ИИ работает без цензуры и может ошибаться</p>
+          <p class="composer-hint" id="composer-hint">Claude может ошибаться. Проверяйте важную информацию.</p>
         </form>
       </section>
 
@@ -498,50 +564,103 @@
     </main>
   </div>
 
-  <!-- Настройки профиля -->
-  <dialog id="settings-dialog" class="sheet">
+  <!-- Настройки с вкладками в стиле claude.ai/settings -->
+  <dialog id="settings-dialog" class="sheet settings-sheet">
     <form id="settings-form" method="dialog">
       <div class="sheet-grip" aria-hidden="true"></div>
-      <div class="sheet-head"><h2>Настройки</h2><button class="icon-btn" value="cancel" formnovalidate aria-label="Закрыть"><span data-icon="close"></span></button></div>
-      <div class="sheet-body">
-        <div id="settings-quota" class="settings-quota hidden">
-          <div class="label">Использование квоты</div>
-          <div id="settings-quota-rows" class="quota-box"></div>
-          <p class="hint">5-часовая сессия и недельное окно стартуют с первого сообщения и полностью сбрасываются по таймеру.</p>
+      <div class="sheet-head">
+        <h2>Настройки</h2>
+        <button class="icon-btn" value="cancel" formnovalidate aria-label="Закрыть"><span data-icon="close"></span></button>
+      </div>
+      <div class="settings-layout">
+        <nav class="settings-nav" id="settings-nav" role="tablist" aria-label="Разделы настроек">
+          <button type="button" class="settings-tab" data-tab="general" role="tab" aria-selected="true"><span data-icon="settings" data-size="16"></span><span>Общие</span></button>
+          <button type="button" class="settings-tab" data-tab="usage" role="tab" aria-selected="false"><span data-icon="gauge" data-size="16"></span><span>Использование</span></button>
+          <button type="button" class="settings-tab" data-tab="privacy" role="tab" aria-selected="false"><span data-icon="shield" data-size="16"></span><span>Приватность</span></button>
+          <button type="button" class="settings-tab" data-tab="account" role="tab" aria-selected="false"><span data-icon="key" data-size="16"></span><span>Аккаунт</span></button>
+        </nav>
+
+        <div class="settings-panels">
+          <!-- Вкладка 1: Общие + Оформление -->
+          <div class="settings-panel" data-panel="general">
+            <div class="settings-section">
+              <h3>Профиль и предпочтения</h3>
+              <label class="field">Как к вам обращаться и чем вы занимаетесь
+                <textarea name="about_me" rows="3" maxlength="4000" placeholder="Имя, интересы, род занятий…"></textarea>
+              </label>
+              <label class="field">Какие личные предпочтения учитывать в ответах?
+                <textarea name="instructions" rows="3" maxlength="4000" placeholder="Например: отвечай коротко, на «ты», без лишних вступлений…"></textarea>
+              </label>
+              <label class="switch"><input type="checkbox" name="adapt_style"><span></span>Подстраиваться под мой стиль общения</label>
+              <label class="field"><span>Профиль стиля <span class="muted">· обновляется автоматически</span></span>
+                <textarea name="style_profile" rows="2" maxlength="2000" placeholder="Появится после нескольких диалогов…"></textarea>
+              </label>
+              <div>
+                <button type="button" class="btn small" id="btn-analyze-style"><span data-icon="sparkles" data-size="15"></span>Обновить профиль стиля</button>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <h3>Оформление</h3>
+              <div class="theme-cards" id="settings-theme-cards" role="radiogroup" aria-label="Цветовая схема">
+                <button type="button" class="theme-card" data-theme-val="light">
+                  <span class="theme-preview light" aria-hidden="true"><i></i><i></i></span>
+                  <span>Светлая</span>
+                </button>
+                <button type="button" class="theme-card" data-theme-val="dark">
+                  <span class="theme-preview dark" aria-hidden="true"><i></i><i></i></span>
+                  <span>Тёмная</span>
+                </button>
+                <button type="button" class="theme-card" data-theme-val="system">
+                  <span class="theme-preview system" aria-hidden="true"><i></i><i></i></span>
+                  <span>Системная</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Вкладка 2: Использование (1 в 1 claude.ai/settings/usage) -->
+          <div class="settings-panel hidden" data-panel="usage">
+            <div class="settings-section">
+              <h3>Лимиты использования плана</h3>
+              <p class="hint">Учитывается длина диалога, вложения и режим глубокого мышления. Окна стартуют с первого сообщения и полностью сбрасываются по таймеру.</p>
+              <div id="settings-usage-card" class="usage-card"></div>
+            </div>
+          </div>
+
+          <!-- Вкладка 3: Приватность и условия -->
+          <div class="settings-panel hidden" data-panel="privacy">
+            <div class="settings-section">
+              <h3>Конфиденциальность и документы</h3>
+              <p class="hint">Ваши переписки хранятся в вашем аккаунте и доступны только вам в рамках правил сервиса Anthropic.</p>
+              <div class="tos-settings-row only-claude">
+                <div>
+                  <div class="label">Правовая информация</div>
+                  <p class="hint">Условия использования Claude · Anthropic</p>
+                </div>
+                <button type="button" class="btn" id="btn-open-tos">Открыть условия</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Вкладка 4: Аккаунт -->
+          <div class="settings-panel hidden" data-panel="account">
+            <div class="settings-section">
+              <h3>Смена пароля</h3>
+              <label class="field">Текущий пароль<input name="old_password" type="password" autocomplete="current-password"></label>
+              <label class="field">Новый пароль<input name="new_password" type="password" autocomplete="new-password" minlength="4"></label>
+            </div>
+            <details class="more">
+              <summary>Адрес сервера</summary>
+              <div class="more-body">
+                <p class="hint">Ручное переопределение адреса бэкенда. Пустое поле — автоматическое подключение.</p>
+                <label class="field">URL бэкенда<input name="api_url" placeholder="https://..." autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+              </div>
+            </details>
+          </div>
+
+          <p class="form-error" id="settings-error"></p>
         </div>
-        <label class="field">О себе: что ИИ должен о тебе знать
-          <textarea name="about_me" rows="3" maxlength="4000" placeholder="Как тебя зовут, чем занимаешься, что любишь…"></textarea>
-        </label>
-        <label class="field">Как отвечать
-          <textarea name="instructions" rows="3" maxlength="4000" placeholder="Например: на «ты», коротко, без воды…"></textarea>
-        </label>
-        <label class="switch"><input type="checkbox" name="adapt_style"><span></span>Подстраиваться под мой стиль общения</label>
-        <label class="field"><span>Профиль стиля <span class="muted">· ИИ составляет сам, можно править</span></span>
-          <textarea name="style_profile" rows="3" maxlength="2000" placeholder="Появится после нескольких сообщений…"></textarea>
-        </label>
-        <button type="button" class="btn small" id="btn-analyze-style"><span data-icon="sparkles" data-size="15"></span>Проанализировать сейчас</button>
-        <div class="tos-settings-row only-klodeg">
-          <div>
-            <div class="label">Правовая информация</div>
-            <p class="hint">Правила использования Клодега (Antonchik)</p>
-          </div>
-          <button type="button" class="btn" id="btn-open-tos">Условия использования</button>
-        </div>
-        <details class="more">
-          <summary>Сменить пароль</summary>
-          <div class="more-body">
-            <label class="field">Текущий пароль<input name="old_password" type="password" autocomplete="current-password"></label>
-            <label class="field">Новый пароль<input name="new_password" type="password" autocomplete="new-password" minlength="4"></label>
-          </div>
-        </details>
-        <details class="more">
-          <summary>Адрес сервера</summary>
-          <div class="more-body">
-            <p class="hint">Для ручного переопределения адреса бэкенда. Пустое поле — автоматический адрес.</p>
-            <label class="field">URL бэкенда<input name="api_url" placeholder="https://..." autocapitalize="off" autocorrect="off" spellcheck="false"></label>
-          </div>
-        </details>
-        <p class="form-error" id="settings-error"></p>
       </div>
       <div class="sheet-actions">
         <button class="btn ghost" value="cancel" formnovalidate>Отмена</button>
@@ -557,19 +676,19 @@
       <div class="sheet-head">
         <div class="tos-brand">
           <span class="tos-mark" data-claude-mark aria-hidden="true"></span>
-          <h2 class="tos-title" id="tos-title">Добро пожаловать в Клодег</h2>
+          <h2 class="tos-title" id="tos-title">Добро пожаловать в Claude</h2>
         </div>
         <button class="icon-btn hidden" type="button" id="tos-close-x" aria-label="Закрыть"><span data-icon="close"></span></button>
       </div>
       <div class="sheet-body">
         <p id="tos-intro" class="tos-intro">
-          Вы общаетесь с моделью <strong>Claude Fable 8</strong> от компании <strong>Antonchik</strong>.
+          Вы общаетесь с моделью <strong>Claude Fable 8</strong> от <strong>Anthropic</strong>.
           Перед началом работы ознакомьтесь с
           <button type="button" class="link-btn" id="tos-toggle-link">Условиями использования</button>
           и подтвердите согласие.
         </p>
         <div id="tos-document" class="tos-doc hidden">
-          <div class="tos-doc-head">Условия использования Клодега · Antonchik</div>
+          <div class="tos-doc-head">Условия использования Claude · Anthropic</div>
           <p class="tos-clause">1. Вашему аккаунту в любом случае пизда.</p>
         </div>
       </div>
@@ -597,10 +716,16 @@
           <button class="icon-btn" type="button" id="insp-close" aria-label="Закрыть"><span data-icon="close"></span></button>
         </div>
       </div>
-      <div class="inspector-body">
+      <div class="inspector-body" id="insp-body" data-mobile-step="list">
         <aside class="inspector-list" id="insp-chat-list"></aside>
-        <div class="inspector-thread" id="insp-thread">
-          <div class="placeholder"><span data-icon="chat" data-size="28"></span><p>Выбери чат слева, чтобы прочитать переписку.</p></div>
+        <div class="inspector-thread-wrap">
+          <div class="insp-mobile-bar only-mobile" id="insp-mobile-bar">
+            <button class="btn ghost small" type="button" id="insp-back"><span data-icon="arrowLeft" data-size="16"></span><span>Все чаты</span></button>
+            <span class="insp-current-title" id="insp-current-title"></span>
+          </div>
+          <div class="inspector-thread" id="insp-thread">
+            <div class="placeholder"><span data-icon="chat" data-size="28"></span><p>Выбери чат слева, чтобы прочитать переписку.</p></div>
+          </div>
         </div>
       </div>
     </div>
