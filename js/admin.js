@@ -1,12 +1,21 @@
-// режим "Админка": модель, доступ гостей, апелляции, просмотр любых чатов, пользователи и квоты
+// режим "Админка": модель, доступ гостей, онлайн-статус, апелляции, живой инспектор чатов, пользователи и квоты
 import { api, fileUrl } from "./api.js";
-import { $, el, icon, toast, fmtTokens, fmtReset, fmtDateTime, ask, renderMarkdown, lightbox, isMobile } from "./ui.js";
+import { $, el, icon, toast, fmtTokens, fmtReset, fmtDateTime, fmtLastSeen, ask, renderMarkdown, lightbox, isMobile } from "./ui.js";
 
 let me = null;
 let onLockChange = () => {};
 let llmTimer = 0;
+let adminTimer = 0;
+let inspTimer = 0;
+let adminBusy = false;
+let inspBusy = false;
+let lastUsersKey = "";
+let userRefs = new Map();
 let inspUser = null;
 let inspChatId = null;
+let inspChats = [];
+let lastInspListKey = "";
+let lastInspThreadKey = "";
 
 const LLM_STATE = {
   ready: ["on", "Работает"],
@@ -51,7 +60,10 @@ export function initAdmin(opts) {
       loadLlm();
     }
   });
-  $("#insp-close").addEventListener("click", () => $("#chats-dialog").close());
+  const chatsDlg = $("#chats-dialog");
+  $("#insp-close").addEventListener("click", () => chatsDlg.close());
+  chatsDlg.addEventListener("close", stopInspPoll);
+  $("#insp-refresh")?.addEventListener("click", () => refreshInspQuiet(true));
   $("#insp-back")?.addEventListener("click", () => {
     $("#insp-body").dataset.mobileStep = "list";
   });
@@ -66,6 +78,57 @@ export function initAdmin(opts) {
       loadAdmin(me, !$("#lock-toggle").checked);
     }
   });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) return;
+    if (me && !$(".view-admin").classList.contains("hidden")) refreshAdminQuiet();
+    if (chatsDlg.open && inspUser) refreshInspQuiet(false);
+  });
+}
+
+function presenceText(u) {
+  if (u.online) return u.generating ? "Онлайн · печатает…" : "Онлайн";
+  return u.last_seen ? `Был(а): ${fmtLastSeen(u.last_seen)}` : "Ещё не заходил";
+}
+
+function applyPresence(node, u) {
+  if (!node) return;
+  const on = Boolean(u.online);
+  node.className = `user-presence${on ? " online" : ""}`;
+  node.replaceChildren(el("i", { class: `dot${on ? " on" : ""}` }), el("span", { text: presenceText(u) }));
+}
+
+function usageTexts(us) {
+  const u5 = `5 ч: ${fmtTokens(us.used_5h)}${us.limit_5h != null ? ` / ${fmtTokens(us.limit_5h)} (${us.pct_5h}%)` : ""}${us.reset_5h ? ` · сброс ${fmtReset(us.reset_5h)}` : ""}`;
+  const uw = `Неделя: ${fmtTokens(us.used_week)}${us.limit_week != null ? ` / ${fmtTokens(us.limit_week)} (${us.pct_week}%)` : ""}${us.reset_week ? ` · сброс ${fmtReset(us.reset_week, true)}` : ""}`;
+  return [u5, uw];
+}
+
+function startAdminPoll() {
+  clearInterval(adminTimer);
+  // мягкое фоновое обновление онлайна, счётчиков чатов, квот и апелляций без перезагрузки страницы
+  adminTimer = setInterval(() => {
+    if ($(".view-admin").classList.contains("hidden")) {
+      clearInterval(adminTimer);
+      adminTimer = 0;
+      return;
+    }
+    if (!document.hidden) refreshAdminQuiet();
+  }, 5000);
+}
+
+async function refreshAdminQuiet() {
+  if (!me || adminBusy) return;
+  adminBusy = true;
+  try {
+    const users = await api("/api/admin/users");
+    renderAppeals(users);
+    syncUsers(users);
+    window.dispatchEvent(new CustomEvent("nh:appeals-updated"));
+  } catch {
+    // тихий фоновый опрос не спамит тостами при кратковременном обрыве
+  } finally {
+    adminBusy = false;
+  }
 }
 
 export async function loadAdmin(currentUser, aiLocked) {
@@ -74,10 +137,11 @@ export async function loadAdmin(currentUser, aiLocked) {
   loadLlm().then((st) => {
     if (st === "loading") pollLlm();
   });
+  startAdminPoll();
   try {
     const users = await api("/api/admin/users");
     renderAppeals(users);
-    renderUsers(users);
+    syncUsers(users, true);
     window.dispatchEvent(new CustomEvent("nh:appeals-updated"));
   } catch (e) {
     toast(e.message, true);
@@ -258,8 +322,45 @@ function limitField(u, field, label) {
   return el("label", { class: "field" }, label, input);
 }
 
-function renderUsers(users) {
+function syncUsers(users, forceRender = false) {
+  const key = users.map((u) => `${u.id}:${u.role}:${u.ban_status || "active"}:${u.ban_reason || ""}`).join("|");
+  if (!forceRender && key === lastUsersKey && userRefs.size === users.length) {
+    // обновляем онлайн, счётчик чатов, квоты и статус на месте - без потери фокуса и состояния спойлеров
+    for (const u of users) {
+      const ref = userRefs.get(u.id);
+      if (!ref) continue;
+      Object.assign(ref.user, u);
+      applyPresence(ref.presenceEl, u);
+      const [u5, uw] = usageTexts(u.usage);
+      ref.u5El.textContent = u5;
+      ref.uwEl.textContent = uw;
+      ref.chatBtnText.textContent = `Чаты (${u.chat_count || 0})`;
+      const st = u.ban_status || "active";
+      const isBanned = st !== "active";
+      const aiOff = u.role !== "admin" && Boolean(u.ai_disabled);
+      if (ref.statusBadge && !isBanned) {
+        ref.statusBadge.className = `status-tag ${aiOff ? "warn" : "on"}`;
+        ref.statusBadge.textContent = aiOff ? "ИИ выкл." : "Активен";
+      }
+      if (ref.aiBox && document.activeElement !== ref.aiBox) {
+        ref.aiBox.checked = !u.ai_disabled;
+        ref.aiHint.textContent = u.ai_disabled ? "Без бана · запросы заблокированы" : "Может писать в чат";
+        ref.aiHint.classList.toggle("off", Boolean(u.ai_disabled));
+      }
+    }
+    return;
+  }
+  const openSet = new Set();
+  for (const [uid, ref] of userRefs.entries()) {
+    if (ref.moreDetails?.open) openSet.add(uid);
+  }
+  lastUsersKey = key;
+  renderUsers(users, openSet);
+}
+
+function renderUsers(users, openSet = null) {
   const desktop = !isMobile();
+  userRefs = new Map();
   $("#users").replaceChildren(
     ...users.map((u) => {
       const self = u.id === me.id;
@@ -273,7 +374,6 @@ function renderUsers(users) {
       role.addEventListener("change", async () => {
         if (await patch(u, { role: role.value })) loadAdmin(me, !$("#lock-toggle").checked);
       });
-      const us = u.usage;
       const st = u.ban_status || "active";
       const [baseCls, baseLabel] = BAN_META[st] || BAN_META.suspended;
       const isBanned = st !== "active";
@@ -282,14 +382,19 @@ function renderUsers(users) {
       const stCls = !isBanned && aiOff ? "warn" : baseCls;
       const stLabel = !isBanned && aiOff ? "ИИ выкл." : baseLabel;
       const statusBadge = !self ? el("span", { class: `status-tag ${stCls}`, text: stLabel }) : null;
-      const u5Text = `${fmtTokens(us.used_5h)}${us.limit_5h != null ? ` / ${fmtTokens(us.limit_5h)} (${us.pct_5h}%)` : ""}${us.reset_5h ? ` · сброс ${fmtReset(us.reset_5h)}` : ""}`;
-      const uwText = `${fmtTokens(us.used_week)}${us.limit_week != null ? ` / ${fmtTokens(us.limit_week)} (${us.pct_week}%)` : ""}${us.reset_week ? ` · сброс ${fmtReset(us.reset_week, true)}` : ""}`;
+      const presenceEl = el("span", { class: "user-presence" });
+      applyPresence(presenceEl, u);
+      const [u5Text, uwText] = usageTexts(u.usage);
+      const u5El = el("span", { text: u5Text });
+      const uwEl = el("span", { text: uwText });
 
       // выборочный тумблер доступа к ИИ без бана (как глобальный "Разрешить ИИ гостям", но на одного человека)
       let aiToggleRow = null;
+      let aiBox = null;
+      let aiHint = null;
       if (isGuest && !self) {
-        const aiBox = el("input", { type: "checkbox", checked: !u.ai_disabled });
-        const aiHint = el("span", {
+        aiBox = el("input", { type: "checkbox", checked: !u.ai_disabled });
+        aiHint = el("span", {
           class: `user-ai-hint${u.ai_disabled ? " off" : ""}`,
           text: u.ai_disabled ? "Без бана · запросы заблокированы" : "Может писать в чат",
         });
@@ -315,6 +420,7 @@ function renderUsers(users) {
         );
       }
 
+      const chatBtnText = el("span", { text: `Чаты (${u.chat_count || 0})` });
       // быстрые главные действия всегда на виду (на телефоне удобно нажимать одной рукой)
       const quickActions = el(
         "div",
@@ -322,7 +428,7 @@ function renderUsers(users) {
         el("button", {
           class: "btn", type: "button",
           onclick: () => openUserChats(u),
-        }, icon("chat", 16), `Чаты (${u.chat_count || 0})`),
+        }, icon("chat", 16), chatBtnText),
         self ? null : (
           isBanned
             ? el("button", {
@@ -341,9 +447,10 @@ function renderUsers(users) {
       );
 
       // второстепенные настройки на телефоне свёрнуты в аккордеон, на ПК открыты сразу
+      const detailsOpen = openSet && openSet.size ? openSet.has(u.id) : desktop;
       const moreDetails = el(
         "details",
-        { class: "more user-more", open: desktop },
+        { class: "more user-more", open: detailsOpen },
         el("summary", { text: "Права, лимиты и управление" }),
         el(
           "div",
@@ -406,6 +513,8 @@ function renderUsers(users) {
         )
       );
 
+      userRefs.set(u.id, { user: u, presenceEl, statusBadge, u5El, uwEl, chatBtnText, aiBox, aiHint, moreDetails });
+
       return el(
         "div",
         { class: `user-card${isBanned ? " disabled" : ""}` },
@@ -417,16 +526,12 @@ function renderUsers(users) {
             "div",
             { class: "user-ident" },
             el("strong", { text: u.username }),
-            el("span", { class: "muted", text: self ? "админ · это ты" : (u.ban_reason || (u.role === "admin" ? "админ" : "гость")) })
+            el("span", { class: "muted", text: self ? "админ · это ты" : (u.ban_reason || (u.role === "admin" ? "админ" : "гость")) }),
+            presenceEl
           ),
           statusBadge
         ),
-        el(
-          "div",
-          { class: "user-usage-bar" },
-          el("span", { text: `5 ч: ${u5Text}` }),
-          el("span", { text: `Неделя: ${uwText}` })
-        ),
+        el("div", { class: "user-usage-bar" }, u5El, uwEl),
         aiToggleRow,
         quickActions,
         moreDetails
@@ -435,22 +540,46 @@ function renderUsers(users) {
   );
 }
 
-// ---------------- инспектор чатов ----------------
-async function openUserChats(user) {
-  inspUser = user;
-  inspChatId = null;
-  const dlg = $("#chats-dialog");
-  $("#insp-title").textContent = `Чаты: ${user.username}`;
-  const isSelf = me && user.id === me.id;
-  const st = user.ban_status || "active";
-  const [stCls, stLabel] = BAN_META[st] || BAN_META.suspended;
+// ---------------- живой инспектор чатов ----------------
+function stopInspPoll() {
+  clearInterval(inspTimer);
+  inspTimer = 0;
+}
+
+function startInspPoll() {
+  stopInspPoll();
+  inspTimer = setInterval(() => {
+    const dlg = $("#chats-dialog");
+    if (!dlg.open || !inspUser) return stopInspPoll();
+    if (!document.hidden) refreshInspQuiet(false);
+  }, 3000);
+}
+
+function updateInspHeader(u) {
+  const isSelf = me && u.id === me.id;
+  const st = u.ban_status || "active";
+  const [baseCls, baseLabel] = BAN_META[st] || BAN_META.suspended;
+  const isBanned = st !== "active";
+  const aiOff = u.role !== "admin" && Boolean(u.ai_disabled);
   const badge = $("#insp-status");
-  badge.className = `status-tag ${stCls}`;
-  badge.textContent = stLabel;
+  badge.className = `status-tag ${!isBanned && aiOff ? "warn" : baseCls}`;
+  badge.textContent = !isBanned && aiOff ? "ИИ выкл." : baseLabel;
+  applyPresence($("#insp-presence"), u);
   const banBtn = $("#insp-ban-btn");
   banBtn.classList.toggle("hidden", isSelf);
   banBtn.className = `btn ${st === "active" ? "danger" : "primary"}${isSelf ? " hidden" : ""}`;
   banBtn.textContent = st === "active" ? "Приостановить" : "Отозвать бан";
+}
+
+async function openUserChats(user) {
+  inspUser = user;
+  inspChatId = null;
+  inspChats = [];
+  lastInspListKey = "";
+  lastInspThreadKey = "";
+  const dlg = $("#chats-dialog");
+  $("#insp-title").textContent = `Чаты: ${user.username}`;
+  updateInspHeader(user);
 
   $("#insp-body").dataset.mobileStep = "list";
   $("#insp-current-title").textContent = "";
@@ -458,27 +587,52 @@ async function openUserChats(user) {
   $("#insp-thread").replaceChildren(el("div", { class: "placeholder" }, icon("chat", 28), el("p", { text: "Выбери чат слева, чтобы прочитать переписку." })));
   if (!dlg.open) dlg.showModal();
 
+  await refreshInspQuiet(false, true);
+  startInspPoll();
+}
+
+async function refreshInspQuiet(manual = false, isInitial = false) {
+  if (!inspUser || inspBusy) return;
+  const uid = inspUser.id;
+  inspBusy = true;
   try {
-    const data = await api(`/api/admin/users/${user.id}/chats`);
+    const data = await api(`/api/admin/users/${uid}/chats`);
+    if (!inspUser || inspUser.id !== uid) return;
     if (data.user) {
-      inspUser = { ...user, ...data.user };
-      const [c2, l2] = BAN_META[inspUser.ban_status || "active"] || BAN_META.suspended;
-      badge.className = `status-tag ${c2}`;
-      badge.textContent = l2;
+      inspUser = { ...inspUser, ...data.user };
+      updateInspHeader(inspUser);
     }
-    if (!data.chats.length) {
-      $("#insp-chat-list").replaceChildren(el("p", { class: "hint", text: "У пользователя пока нет чатов." }));
+    inspChats = data.chats || [];
+    if (!inspChats.length) {
+      if (lastInspListKey !== "EMPTY") {
+        lastInspListKey = "EMPTY";
+        $("#insp-chat-list").replaceChildren(el("p", { class: "hint", text: "У пользователя пока нет чатов." }));
+      }
       return;
     }
-    renderInspChatList(data.chats);
-    // на ПК сразу открываем последний чат, на телефоне сначала показываем полноэкранный список чатов
-    if (!isMobile()) loadInspChat(data.chats[0].id, data.chats);
+    // если на ПК чат ещё не выбран (первый вход или пользователь только создал первый чат), открываем верхний
+    if (!inspChatId && !isMobile()) {
+      await loadInspChat(inspChats[0].id, inspChats, { silent: !isInitial });
+    } else {
+      renderInspChatList(inspChats);
+      if (inspChatId && inspChats.some((c) => c.id === inspChatId)) {
+        const active = inspChats.find((c) => c.id === inspChatId);
+        if (active) $("#insp-current-title").textContent = active.title;
+        await loadInspChat(inspChatId, inspChats, { silent: true });
+      }
+    }
+    if (manual) toast("Чаты обновлены");
   } catch (e) {
-    toast(e.message, true);
+    if (manual || isInitial) toast(e.message, true);
+  } finally {
+    inspBusy = false;
   }
 }
 
 function renderInspChatList(chats) {
+  const key = `${inspChatId || 0}|` + chats.map((c) => `${c.id}:${c.title}:${c.msg_count}:${Math.floor(c.updated_at)}:${c.generating ? 1 : 0}`).join("|");
+  if (key === lastInspListKey) return;
+  lastInspListKey = key;
   $("#insp-chat-list").replaceChildren(
     ...chats.map((c) =>
       el(
@@ -487,67 +641,121 @@ function renderInspChatList(chats) {
           type: "button",
           class: "insp-chat-btn",
           "aria-current": c.id === inspChatId ? "page" : null,
-          onclick: () => loadInspChat(c.id, chats),
+          onclick: () => loadInspChat(c.id, chats, { silent: false }),
         },
-        el("strong", { text: c.title }),
-        el("span", { text: `${c.msg_count} сообщ. · ${fmtDateTime(c.updated_at)}` })
+        el(
+          "span",
+          { class: "insp-chat-head" },
+          c.generating ? el("i", { class: "chat-gen-dot", "aria-hidden": "true" }) : null,
+          el("strong", { text: c.title })
+        ),
+        el("span", { text: `${c.msg_count} сообщ. · ${fmtDateTime(c.updated_at)}${c.generating ? " · печатает…" : ""}` })
       )
     )
   );
 }
 
-async function loadInspChat(chatId, chats) {
+function buildInspMsgNode(m, username, isLive = false) {
+  const isUser = !isLive && m.role === "user";
+  const box = el("div", { class: `insp-msg${isUser ? " user" : ""}${isLive ? " live" : ""}` });
+  box.append(
+    el(
+      "div",
+      { class: "insp-msg-meta" },
+      el("strong", { text: isUser ? username : "Claude Fable 8" }),
+      isLive
+        ? el("span", { class: "insp-live-badge" }, el("i", { class: "chat-gen-dot", "aria-hidden": "true" }), el("span", { text: m.thinking ? "Думает сейчас…" : "Печатает сейчас…" }))
+        : el("span", { text: fmtDateTime(m.created_at) })
+    )
+  );
+  if (m.attachments?.length) {
+    const attRow = el("div", { class: "att-list" });
+    for (const a of m.attachments) {
+      if (a.kind === "image") {
+        const img = el("img", { alt: a.name, loading: "lazy" });
+        fileUrl(a.id).then((u) => { img.src = u; img.onclick = () => lightbox(u); }).catch(() => {});
+        attRow.append(img);
+      } else {
+        attRow.append(el("span", { class: "file-chip" }, icon("file", 14), el("span", { text: a.name })));
+      }
+    }
+    box.append(attRow);
+  }
+  if (m.tools?.length) {
+    const tRow = el("div", { class: "tools" });
+    for (const t of m.tools) {
+      const label = t.name === "web_search" ? `Поиск: ${t.args?.query || ""}` : t.name === "fetch_url" ? `Открыл: ${t.args?.url || ""}` : t.name;
+      tRow.append(el("span", { class: "tool-chip", text: label }));
+    }
+    box.append(tRow);
+  }
+  if (m.reasoning) {
+    box.append(el("details", { class: "think" }, el("summary", { text: "Размышления" }), el("div", { class: "think-body", text: m.reasoning })));
+  }
+  if (m.content) {
+    const body = el("div", { class: "md" });
+    if (isUser) body.textContent = m.content;
+    else body.innerHTML = renderMarkdown(m.content);
+    box.append(body);
+  } else if (isLive) {
+    box.append(el("p", { class: "hint", text: m.status || "Ожидает ответ модели…" }));
+  }
+  return box;
+}
+
+async function loadInspChat(chatId, chats, { silent = false } = {}) {
+  const switched = inspChatId !== chatId;
   inspChatId = chatId;
   const active = chats.find((c) => c.id === chatId);
   $("#insp-current-title").textContent = active ? active.title : "";
-  $("#insp-body").dataset.mobileStep = "thread";
+  if (!silent || switched) {
+    $("#insp-body").dataset.mobileStep = "thread";
+  }
   renderInspChatList(chats);
-  $("#insp-thread").replaceChildren(el("p", { class: "hint", text: "Загружаю сообщения…" }));
+  const threadEl = $("#insp-thread");
+  if (!silent) {
+    lastInspThreadKey = "";
+    threadEl.replaceChildren(el("p", { class: "hint", text: "Загружаю сообщения…" }));
+  }
   try {
     const data = await api(`/api/admin/chats/${chatId}`);
-    if (!data.messages.length) {
-      $("#insp-thread").replaceChildren(el("p", { class: "hint", text: "Чат пустой." }));
+    if (inspChatId !== chatId) return;
+    if (data.user && inspUser && data.user.id === inspUser.id) {
+      inspUser = { ...inspUser, ...data.user };
+      updateInspHeader(inspUser);
+    }
+    const msgs = data.messages || [];
+    const live = data.live || null;
+    const last = msgs[msgs.length - 1];
+    const fp = `${chatId}|${msgs.length}|${last?.id || 0}|${(last?.content || "").length}|${live ? `${live.content.length}:${live.reasoning.length}:${live.tools.length}:${live.thinking ? 1 : 0}:${live.status}` : "0"}`;
+    if (silent && fp === lastInspThreadKey) return;
+    lastInspThreadKey = fp;
+
+    // запоминаем, был ли админ внизу переписки и какие спойлеры размышлений открыты
+    const wasNearBottom = switched || !silent || (threadEl.scrollHeight - threadEl.scrollTop - threadEl.clientHeight < 90);
+    const openThinks = new Set();
+    threadEl.querySelectorAll("details.think").forEach((d, i) => {
+      if (d.open) openThinks.add(i);
+    });
+
+    if (!msgs.length && !live) {
+      threadEl.replaceChildren(el("p", { class: "hint", text: "Чат пустой." }));
       return;
     }
-    $("#insp-thread").replaceChildren(
-      ...data.messages.map((m) => {
-        const isUser = m.role === "user";
-        const box = el("div", { class: `insp-msg${isUser ? " user" : ""}` });
-        box.append(
-          el(
-            "div",
-            { class: "insp-msg-meta" },
-            el("strong", { text: isUser ? data.user.username : "Claude Fable 8" }),
-            el("span", { text: fmtDateTime(m.created_at) })
-          )
-        );
-        if (m.attachments?.length) {
-          const attRow = el("div", { class: "att-list" });
-          for (const a of m.attachments) {
-            if (a.kind === "image") {
-              const img = el("img", { alt: a.name, loading: "lazy" });
-              fileUrl(a.id).then((u) => { img.src = u; img.onclick = () => lightbox(u); }).catch(() => {});
-              attRow.append(img);
-            } else {
-              attRow.append(el("span", { class: "file-chip" }, icon("file", 14), el("span", { text: a.name })));
-            }
-          }
-          box.append(attRow);
-        }
-        if (m.reasoning) {
-          box.append(el("details", { class: "think" }, el("summary", { text: "Размышления" }), el("div", { class: "think-body", text: m.reasoning })));
-        }
-        if (m.content) {
-          const body = el("div", { class: "md" });
-          if (isUser) body.textContent = m.content;
-          else body.innerHTML = renderMarkdown(m.content);
-          box.append(body);
-        }
-        return box;
-      })
-    );
+    const nodes = msgs.map((m) => buildInspMsgNode(m, data.user?.username || "гость", false));
+    if (live) nodes.push(buildInspMsgNode(live, data.user?.username || "гость", true));
+    threadEl.replaceChildren(...nodes);
+
+    if (openThinks.size) {
+      threadEl.querySelectorAll("details.think").forEach((d, i) => {
+        if (openThinks.has(i)) d.open = true;
+      });
+    }
+    if (wasNearBottom) {
+      threadEl.scrollTop = threadEl.scrollHeight;
+    }
   } catch (e) {
-    toast(e.message, true);
+    if (!silent) toast(e.message, true);
   }
 }
 

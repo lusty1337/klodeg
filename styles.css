@@ -205,7 +205,7 @@ html.theme-switching, html.theme-switching * {
   transition: background-color 220ms var(--ease-out-quart), border-color 220ms var(--ease-out-quart), color 180ms var(--ease-out-quart) !important;
 }
 body {
-  position: fixed; inset: 0; overflow: hidden; overscroll-behavior: none;
+  position: fixed; inset: 0; overflow: hidden; overflow: clip; overscroll-behavior: none;
   background: var(--bg); color: var(--text);
   font: 400 15px/1.55 var(--font);
   -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
@@ -360,9 +360,9 @@ input[type=search]::-webkit-search-cancel-button { -webkit-appearance: none; }
 }
 
 /* переключатель */
-.switch { display: flex; align-items: center; gap: 12px; font-size: 14.5px; color: var(--text); cursor: pointer; user-select: none; min-height: 36px; }
+.switch { position: relative; display: flex; align-items: center; gap: 12px; font-size: 14.5px; color: var(--text); cursor: pointer; user-select: none; min-height: 36px; }
 .switch.mini { min-height: 24px; gap: 0; }
-.switch input { position: absolute; opacity: 0; pointer-events: none; }
+.switch input { position: absolute; inset: 0; width: 0; height: 0; margin: 0; opacity: 0; pointer-events: none; }
 .switch > span { position: relative; width: 40px; height: 24px; border-radius: var(--r-full); background: var(--surface-3); flex-shrink: 0; transition: background-color 180ms ease; }
 .switch > span::after {
   content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: var(--r-full);
@@ -484,7 +484,7 @@ details.more[open] > summary::before { transform: rotate(45deg); }
 /* ================= каркас ================= */
 .app {
   position: fixed; left: 0; right: 0; top: var(--vv-top, 0px); height: var(--vh, 100dvh);
-  display: flex; overflow: hidden;
+  display: flex; overflow: hidden; overflow: clip;
   padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px);
 }
 .scrim { display: none; }
@@ -971,6 +971,18 @@ dialog.sheet.settings-sheet { width: min(760px, calc(100% - 32px)); }
 .user-ident { flex: 1; min-width: 120px; display: grid; gap: 1px; }
 .user-ident strong { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .user-ident .muted { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-presence {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12.5px; color: var(--muted); white-space: nowrap;
+}
+.user-presence .dot { width: 7px; height: 7px; }
+.user-presence.online { color: var(--ok); font-weight: 500; }
+.user-presence.online .dot { animation: spark-breathe 2.2s ease-in-out infinite; }
+.insp-chat-head { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.insp-msg.live { border: 1px dashed var(--accent); background: var(--surface); }
+.insp-live-badge {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: var(--accent);
+}
 .user-usage-bar {
   display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 8px 11px; border-radius: var(--r-s);
   background: var(--surface); border: 1px solid var(--border);

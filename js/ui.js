@@ -265,6 +265,22 @@ export function fmtDateTime(ts) {
   return new Date(ts * 1000).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
+export function fmtLastSeen(ts) {
+  if (!ts) return "ещё не заходил";
+  const diff = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  if (diff < 60) return "только что";
+  if (diff < 3600) return `${Math.floor(diff / 60)} мин назад`;
+  const d = new Date(ts * 1000);
+  const hhmm = d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const thatDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((today - thatDay) / 86400000);
+  if (days === 0) return `сегодня в ${hhmm}`;
+  if (days === 1) return `вчера в ${hhmm}`;
+  return `${d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })} в ${hhmm}`;
+}
+
 export function lightbox(src) {
   const box = el("div", { class: "lightbox", onclick: () => box.remove() }, el("img", { src, alt: "" }));
   const onKey = (e) => {
