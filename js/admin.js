@@ -27,22 +27,28 @@ export function initAdmin(opts) {
   $("#btn-add-user").addEventListener("click", addUser);
   $("#btn-llm-refresh").addEventListener("click", loadLlm);
   $("#btn-llm-start").addEventListener("click", async () => {
+    $("#btn-llm-start").disabled = true;
     try {
       await api("/api/admin/llm/start", { method: "POST" });
       toast("Модель загружается…");
+      await loadLlm();
       pollLlm();
     } catch (e) {
+      $("#btn-llm-start").disabled = false;
       toast(e.message, true);
     }
   });
   $("#btn-llm-stop").addEventListener("click", async () => {
+    $("#btn-llm-stop").disabled = true;
     try {
       await api("/api/admin/llm/stop", { method: "POST" });
+      clearInterval(llmTimer);
       toast("Модель выгружена, память свободна");
-      loadLlm();
+      await loadLlm();
       window.dispatchEvent(new CustomEvent("nh:refresh-status"));
     } catch (e) {
       toast(e.message, true);
+      loadLlm();
     }
   });
   $("#insp-close").addEventListener("click", () => $("#chats-dialog").close());
@@ -65,7 +71,9 @@ export function initAdmin(opts) {
 export async function loadAdmin(currentUser, aiLocked) {
   me = currentUser;
   setLocked(aiLocked);
-  loadLlm();
+  loadLlm().then((st) => {
+    if (st === "loading") pollLlm();
+  });
   try {
     const users = await api("/api/admin/users");
     renderAppeals(users);
@@ -80,8 +88,17 @@ function pollLlm() {
   clearInterval(llmTimer);
   let n = 0;
   llmTimer = setInterval(async () => {
+    if ($(".view-admin").classList.contains("hidden")) {
+      clearInterval(llmTimer);
+      return;
+    }
     const st = await loadLlm();
-    if (st !== "loading" || ++n > 200 || $(".view-admin").classList.contains("hidden")) clearInterval(llmTimer);
+    ++n;
+    // на первых 2 тиках не обрываем опрос, если llama-server ещё только стартует
+    if (st === "ready" || (st === "offline" && n >= 2) || n > 240) {
+      clearInterval(llmTimer);
+      window.dispatchEvent(new CustomEvent("nh:refresh-status"));
+    }
   }, 2000);
 }
 
@@ -95,13 +112,14 @@ async function loadLlm() {
     tag.textContent = text;
     const mins = Math.floor((d.uptime || 0) / 60);
     const secs = (d.uptime || 0) % 60;
+    const ramGb = d.rss_mib != null ? ` · в ОЗУ ${(d.rss_mib / 1024).toFixed(1)} ГБ` : "";
     const suffix = d.state === "ready" && d.uptime
-      ? ` · работает ${mins || 1} мин`
-      : d.state === "loading" && d.uptime
-        ? ` · грузится ${mins ? `${mins} мин ` : ""}${secs} с (с SSD до 5 мин)`
+      ? ` · работает ${mins || 1} мин${ramGb}`
+      : d.state === "loading"
+        ? ` · грузится ${mins ? `${mins} мин ` : ""}${secs} с${ramGb} (первый старт с SSD ~1–1.5 мин)`
         : "";
     $("#llm-model-name").textContent = d.model + suffix;
-    $("#llm-problem").textContent = d.problem || "";
+    $("#llm-problem").textContent = d.problem || (d.state === "offline" && d.last_error ? d.last_error : "");
     $("#llm-cmd").textContent = d.cmd || "";
     $("#llm-log").textContent = d.log || "Лог пуст: модель ещё не запускалась.";
     $("#btn-llm-start").disabled = !d.managed || d.state !== "offline" || Boolean(d.problem);
@@ -257,10 +275,45 @@ function renderUsers(users) {
       });
       const us = u.usage;
       const st = u.ban_status || "active";
-      const [stCls, stLabel] = BAN_META[st] || BAN_META.suspended;
+      const [baseCls, baseLabel] = BAN_META[st] || BAN_META.suspended;
       const isBanned = st !== "active";
+      const isGuest = u.role !== "admin";
+      const aiOff = isGuest && Boolean(u.ai_disabled);
+      const stCls = !isBanned && aiOff ? "warn" : baseCls;
+      const stLabel = !isBanned && aiOff ? "ИИ выкл." : baseLabel;
+      const statusBadge = !self ? el("span", { class: `status-tag ${stCls}`, text: stLabel }) : null;
       const u5Text = `${fmtTokens(us.used_5h)}${us.limit_5h != null ? ` / ${fmtTokens(us.limit_5h)} (${us.pct_5h}%)` : ""}${us.reset_5h ? ` · сброс ${fmtReset(us.reset_5h)}` : ""}`;
       const uwText = `${fmtTokens(us.used_week)}${us.limit_week != null ? ` / ${fmtTokens(us.limit_week)} (${us.pct_week}%)` : ""}${us.reset_week ? ` · сброс ${fmtReset(us.reset_week, true)}` : ""}`;
+
+      // выборочный тумблер доступа к ИИ без бана (как глобальный "Разрешить ИИ гостям", но на одного человека)
+      let aiToggleRow = null;
+      if (isGuest && !self) {
+        const aiBox = el("input", { type: "checkbox", checked: !u.ai_disabled });
+        const aiHint = el("span", {
+          class: `user-ai-hint${u.ai_disabled ? " off" : ""}`,
+          text: u.ai_disabled ? "Без бана · запросы заблокированы" : "Может писать в чат",
+        });
+        aiBox.addEventListener("change", async () => {
+          const disabled = !aiBox.checked;
+          if (!(await patch(u, { ai_disabled: disabled }))) {
+            aiBox.checked = !disabled;
+            return;
+          }
+          u.ai_disabled = disabled;
+          aiHint.textContent = disabled ? "Без бана · запросы заблокированы" : "Может писать в чат";
+          aiHint.classList.toggle("off", disabled);
+          if (statusBadge && !isBanned) {
+            statusBadge.className = `status-tag ${disabled ? "warn" : "on"}`;
+            statusBadge.textContent = disabled ? "ИИ выкл." : "Активен";
+          }
+        });
+        aiToggleRow = el(
+          "div",
+          { class: "user-ai-row" },
+          el("label", { class: "switch" }, aiBox, el("span"), "Доступ к ИИ"),
+          aiHint
+        );
+      }
 
       // быстрые главные действия всегда на виду (на телефоне удобно нажимать одной рукой)
       const quickActions = el(
@@ -366,7 +419,7 @@ function renderUsers(users) {
             el("strong", { text: u.username }),
             el("span", { class: "muted", text: self ? "админ · это ты" : (u.ban_reason || (u.role === "admin" ? "админ" : "гость")) })
           ),
-          !self ? el("span", { class: `status-tag ${stCls}`, text: stLabel }) : null
+          statusBadge
         ),
         el(
           "div",
@@ -374,6 +427,7 @@ function renderUsers(users) {
           el("span", { text: `5 ч: ${u5Text}` }),
           el("span", { text: `Неделя: ${uwText}` })
         ),
+        aiToggleRow,
         quickActions,
         moreDetails
       );

@@ -10,7 +10,8 @@ const S = {
   chatId: null,
   messages: [],
   pending: [],
-  web: localStorage.getItem("nh_web") === "1",
+  // поиск включён по умолчанию - модель сама решает, когда проверить факты в интернете
+  web: localStorage.getItem("nh_web_v2") !== "0",
   // по умолчанию "Думать" выключено ради быстрых ответов (включается кнопкой или из меню модели)
   think: localStorage.getItem("nh_think_v2") === "1",
   isAdmin: false,
@@ -84,7 +85,7 @@ export function initChat({ onUsage }) {
   });
   E.web.addEventListener("click", () => {
     S.web = !S.web;
-    localStorage.setItem("nh_web", S.web ? "1" : "0");
+    localStorage.setItem("nh_web_v2", S.web ? "1" : "0");
     syncToggles();
   });
   const toggleThink = (next, notify = true) => {

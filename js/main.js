@@ -582,13 +582,16 @@ function updateUsage(u) {
   }
 }
 
-function updateLock(locked) {
+function updateLock(locked, userDisabled = Boolean(state.user?.ai_disabled)) {
   state.aiLocked = locked;
+  if (state.user) state.user.ai_disabled = Boolean(userDisabled);
+  const isAdmin = state.user?.role === "admin";
+  const effectiveLocked = isAdmin ? locked : (locked || Boolean(userDisabled));
   const badge = $("#lock-badge");
-  badge.classList.toggle("hidden", !locked);
-  const text = state.user?.role === "admin" ? "Гости без ИИ" : "ИИ временно закрыт";
+  badge.classList.toggle("hidden", !effectiveLocked);
+  const text = isAdmin ? "Гости без ИИ" : "ИИ временно закрыт";
   badge.querySelector(".lock-text").textContent = text;
-  badge.title = state.user?.role === "admin" ? "Гости сейчас не могут пользоваться ИИ (переключается в админке)" : text;
+  badge.title = isAdmin ? "Гости сейчас не могут пользоваться ИИ (переключается в админке)" : text;
 }
 
 const STATE_TEXT = {
@@ -637,7 +640,7 @@ async function refreshStatus() {
     sub.querySelector("span").textContent = isClaude && key === "ready" ? "Claude Fable 8" : text;
     sub.title = modelLabel;
     $("#input").placeholder = INPUT_HINT[key] || INPUT_HINT.ready;
-    updateLock(s.ai_locked);
+    updateLock(s.ai_locked, s.user_ai_disabled);
     window.dispatchEvent(new CustomEvent("nh:status", { detail: s }));
   } catch {}
   scheduleStatusPoll(isLoading);
