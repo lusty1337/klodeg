@@ -109,6 +109,8 @@ export function toast(message, isError = false) {
       if (box.matches(":popover-open")) box.hidePopover();
       box.showPopover();
     } catch {}
+  } else if (box.hasAttribute("popover")) {
+    box.removeAttribute("popover");
   }
   const t = el("div", { class: `toast${isError ? " err" : ""}`, text: message });
   box.append(t);

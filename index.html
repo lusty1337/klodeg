@@ -719,27 +719,26 @@
             </div>
           </div>
 
-          <!-- Вкладка 2б: Локальный API (видна только пользователям с правом perm_api) -->
+          <!-- Вкладка 2б: API (видна только пользователям с правом perm_api) -->
           <div class="settings-panel hidden" data-panel="api">
             <div class="settings-section">
               <div class="api-head-row">
-                <h3>Локальный API</h3>
-                <span class="status-tag on">Только Wi-Fi / LAN</span>
+                <h3>API</h3>
+                <span class="status-tag on">OpenAI / Anthropic</span>
               </div>
-              <p class="hint">OpenAI-совместимый доступ для сторонних приложений на iPhone (KODO, Chatbox, Pal Chat, Команды iOS). Работает только в домашней сети.</p>
+              <p class="hint">Эндпоинт для сторонних клиентов и агентов.</p>
 
               <div class="api-card">
                 <div class="field">
-                  <span>HTTPS-адрес <span class="muted">· для KODO и приложений iOS</span></span>
+                  <span>Base URL</span>
                   <div class="api-input-row">
                     <input id="api-base-url" class="mono" type="text" readonly value="—">
                     <button type="button" class="btn small" id="btn-copy-api-url"><span data-icon="copy" data-size="14"></span>Копировать</button>
                   </div>
-                  <span class="hint" id="api-alt-urls"></span>
                 </div>
 
                 <div class="field">
-                  <span>API-ключ</span>
+                  <span>API Key</span>
                   <div class="api-input-row">
                     <input id="api-key-input" class="mono" type="password" readonly value="">
                     <button type="button" class="icon-btn" id="btn-toggle-api-key" aria-label="Показать ключ" title="Показать / скрыть ключ"><span data-icon="eye" data-size="17"></span></button>
@@ -748,14 +747,12 @@
                 </div>
 
                 <div class="api-actions">
-                  <a class="btn small" id="btn-download-ca" href="#"><span data-icon="download" data-size="14"></span>Сертификат для iPhone</a>
                   <button type="button" class="btn small ghost" id="btn-rotate-api-key"><span data-icon="refresh" data-size="14"></span>Перевыпустить ключ</button>
                 </div>
-                <p class="hint" id="api-ca-hint">Чтобы iPhone доверял локальному HTTPS в KODO: скачай сертификат в Safari → Настройки → Профиль загружен → Установить → Основные → Об этом устройстве → Доверие сертификатам → включить «NeuroHub Local CA».</p>
               </div>
 
               <div class="field">
-                <span>Модели <span class="muted">· нажми, чтобы скопировать ID</span></span>
+                <span>Models <span class="muted">· нажми, чтобы скопировать ID</span></span>
                 <div class="api-models" id="api-models-list"></div>
               </div>
             </div>

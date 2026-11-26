@@ -1283,12 +1283,20 @@ dialog.sheet form { display: flex; flex-direction: column; max-height: inherit; 
 .sheet-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px 18px; border-top: 1px solid var(--border); }
 
 .toasts {
-  position: fixed; left: 50%; top: calc(16px + var(--safe-t)); transform: translateX(-50%); z-index: 100;
+  /* в WebKit у [popover] по умолчанию inset: 0, из-за чего контейнер и капсула тоста растягиваются на всю высоту экрана */
+  position: fixed; inset: auto; left: 50%; right: auto; top: calc(16px + var(--safe-t)); bottom: auto;
+  transform: translateX(-50%); z-index: 100;
   margin: 0; padding: 0; border: 0; background: transparent; overflow: visible;
-  display: grid; justify-items: center; gap: 8px; width: max-content; max-width: calc(100% - 32px); pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 8px;
+  width: max-content; max-width: calc(100vw - 32px); height: auto; min-height: 0; max-height: none;
+  pointer-events: none;
 }
-.toasts:not(:popover-open) { display: grid; }
-.toast { padding: 10px 16px; border-radius: var(--r-m); background: var(--text); color: var(--bg); font-size: 14px; font-weight: 500; box-shadow: var(--shadow-float); animation: toast-in 240ms var(--ease-spring) both; overflow-wrap: anywhere; }
+.toasts[popover]:not(:popover-open) { display: none; }
+.toast {
+  flex: 0 0 auto; height: auto; padding: 10px 16px; border-radius: var(--r-m);
+  background: var(--text); color: var(--bg); font-size: 14px; line-height: 1.35; font-weight: 500;
+  box-shadow: var(--shadow-float); animation: toast-in 240ms var(--ease-spring) both; overflow-wrap: anywhere;
+}
 .toast.leaving { animation: toast-out 200ms var(--ease-smooth) forwards; }
 .toast.err { background: var(--danger); color: oklch(0.99 0 0); }
 
@@ -1565,7 +1573,7 @@ dialog.sheet form { display: flex; flex-direction: column; max-height: inherit; 
   .kb .sheet-actions { padding-bottom: 12px; }
   .sheet-actions .btn { flex: 1; }
 
-  .toasts { top: calc(var(--vv-top, 0px) + var(--safe-t) + 60px); bottom: auto; }
+  .toasts { top: calc(var(--vv-top, 0px) + var(--safe-t) + 60px); right: auto; bottom: auto; height: auto; }
 }
 
 /* iPhone увеличивает страницу при фокусе на поле со шрифтом мельче 16px. */

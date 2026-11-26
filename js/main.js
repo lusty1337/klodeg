@@ -819,15 +819,6 @@ function flashCopied(btn) {
 function renderApiSettings(data) {
   apiKeyCache = data;
   $("#api-base-url").value = data.base_url || "";
-  const httpHint = data.http_url && data.http_url !== data.base_url ? `HTTP (без TLS): ${data.http_url}` : "";
-  $("#api-alt-urls").textContent = httpHint;
-  const caBtn = $("#btn-download-ca");
-  const caHint = $("#api-ca-hint");
-  if (caBtn) {
-    caBtn.classList.toggle("hidden", !data.ca_url);
-    if (data.ca_url) caBtn.href = data.ca_url;
-  }
-  if (caHint) caHint.classList.toggle("hidden", !data.ca_url);
   const keyIn = $("#api-key-input");
   keyIn.type = "password";
   keyIn.value = data.api_key || "";
@@ -867,7 +858,7 @@ $("#btn-copy-api-url")?.addEventListener("click", async (e) => {
 
 $("#btn-copy-api-key")?.addEventListener("click", async (e) => {
   const v = $("#api-key-input").value.trim();
-  if (v && (await copyText(v, "API-ключ скопирован"))) flashCopied(e.currentTarget);
+  if (v && (await copyText(v, "API Key скопирован"))) flashCopied(e.currentTarget);
 });
 
 $("#btn-toggle-api-key")?.addEventListener("click", () => {
@@ -877,8 +868,8 @@ $("#btn-toggle-api-key")?.addEventListener("click", () => {
 
 $("#btn-rotate-api-key")?.addEventListener("click", async () => {
   const ok = await ask({
-    title: "Перевыпустить API-ключ?",
-    text: "Старый ключ сразу перестанет работать. В приложениях на iPhone нужно будет вставить новый.",
+    title: "Перевыпустить API Key?",
+    text: "Старый ключ сразу перестанет работать. В подключённых клиентах нужно будет указать новый.",
     ok: "Перевыпустить",
     danger: true,
   });
