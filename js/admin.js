@@ -308,11 +308,21 @@ function renderAppeals(users) {
   );
 }
 
-function permSwitch(u, perm, label) {
+function permSwitch(u, perm, label, allowAdminToggle = false) {
   const admin = u.role === "admin";
-  const box = el("input", { type: "checkbox", checked: admin || u.perms[perm], disabled: admin });
+  const box = el("input", {
+    type: "checkbox",
+    checked: allowAdminToggle ? Boolean(u.perms[perm]) : (admin || u.perms[perm]),
+    disabled: !allowAdminToggle && admin,
+  });
   box.addEventListener("change", async () => {
-    if (!(await patch(u, { [`perm_${perm}`]: box.checked }))) box.checked = !box.checked;
+    if (!(await patch(u, { [`perm_${perm}`]: box.checked }))) {
+      box.checked = !box.checked;
+      return;
+    }
+    if (allowAdminToggle && me && u.id === me.id) {
+      window.dispatchEvent(new CustomEvent("nh:self-perms-changed", { detail: { [perm]: box.checked } }));
+    }
   });
   return el("label", { class: "switch" }, box, el("span"), label);
 }
@@ -460,7 +470,15 @@ function renderUsers(users, openSet = null) {
           "div",
           { class: "more-body" },
           el("label", { class: "field user-role-field" }, "Роль", role),
-          el("div", { class: "user-perms" }, permSwitch(u, "image", "Картинки"), permSwitch(u, "voice", "Звонок"), permSwitch(u, "yolo", "Зрение"), permSwitch(u, "stems", "Стемы")),
+          el(
+            "div",
+            { class: "user-perms" },
+            permSwitch(u, "image", "Картинки"),
+            permSwitch(u, "voice", "Звонок"),
+            permSwitch(u, "yolo", "Зрение"),
+            permSwitch(u, "stems", "Стемы"),
+            permSwitch(u, "api", "Отображение и доступ к API", true)
+          ),
           el(
             "div",
             { class: "user-limits" },
@@ -659,14 +677,24 @@ function renderInspChatList(chats) {
   );
 }
 
+const MODEL_LABELS = {
+  "mythos-5.5": "Claude Mythos 5.5",
+  "opus-5.5": "Claude Opus 5.5",
+  "sonnet-5.5": "Claude Sonnet 5.5",
+  "fable-5.2": "Claude Fable 5.2",
+  "haiku-5.5": "Claude Haiku 5.5",
+};
+
 function buildInspMsgNode(m, username, isLive = false) {
   const isUser = !isLive && m.role === "user";
   const box = el("div", { class: `insp-msg${isUser ? " user" : ""}${isLive ? " live" : ""}` });
+  const asstName = MODEL_LABELS[m.model] || "Claude Mythos 5.5";
+  const asstLabel = m.effort ? `${asstName} · ${m.effort}` : asstName;
   box.append(
     el(
       "div",
       { class: "insp-msg-meta" },
-      el("strong", { text: isUser ? username : "Claude Fable 8" }),
+      el("strong", { text: isUser ? username : asstLabel }),
       isLive
         ? el("span", { class: "insp-live-badge" }, el("i", { class: "chat-gen-dot", "aria-hidden": "true" }), el("span", { text: m.thinking ? "Думает сейчас…" : "Печатает сейчас…" }))
         : el("span", { text: fmtDateTime(m.created_at) })

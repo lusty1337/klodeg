@@ -12,10 +12,10 @@ const P = {
   settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Z"/><circle cx="12" cy="12" r="3"/>',
   logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
-  edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/>',
   trash: '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
   close: '<path d="M18 6 6 18M6 6l12 12"/>',
-  menu: '<path d="M4 7h16M4 12h16M4 17h10"/>',
+  menu: '<path d="M4 9h16M4 15h11"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
   paperclip: '<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
   globe: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z"/>',
@@ -49,6 +49,10 @@ const P = {
   monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
   music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
   upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>',
+  code: '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
+  pen: '<path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/>',
+  book: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+  lightbulb: '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>',
 };
 
 export function icon(name, size = 18) {
@@ -99,9 +103,25 @@ export function setChildren(node, ...children) {
 // ---------------- уведомления ----------------
 export function toast(message, isError = false) {
   const box = $("#toasts");
+  // popover="manual" поднимает тост в top-layer поверх открытого showModal() <dialog>
+  if (typeof box.showPopover === "function") {
+    try {
+      if (box.matches(":popover-open")) box.hidePopover();
+      box.showPopover();
+    } catch {}
+  }
   const t = el("div", { class: `toast${isError ? " err" : ""}`, text: message });
   box.append(t);
-  setTimeout(() => t.remove(), isError ? 5500 : 2600);
+  const ttl = isError ? 5200 : 2400;
+  setTimeout(() => {
+    t.classList.add("leaving");
+    setTimeout(() => {
+      t.remove();
+      if (!box.childElementCount && typeof box.hidePopover === "function") {
+        try { box.hidePopover(); } catch {}
+      }
+    }, 220);
+  }, ttl);
 }
 
 // ---------------- диалоги вместо prompt/confirm ----------------
@@ -139,25 +159,67 @@ export function ask({ title, text = "", ok = "OK", danger = false, fields = [] }
 }
 
 // ---------------- буфер обмена ----------------
-/** navigator.clipboard есть только на https/localhost - с телефона по http нужен запасной путь. */
-export async function copyText(text, label = "Скопировано") {
+function fallbackCopy(text) {
+  // при открытом showModal() <dialog> весь document.body становится inert, поэтому
+  // временный textarea обязан монтироваться внутрь верхнего открытого диалога и лежать в зоне видимости для iOS Safari
+  const openDialogs = $$("dialog[open]");
+  const host = openDialogs[openDialogs.length - 1] || document.body;
+  const prevFocus = document.activeElement;
+  const ta = el("textarea", {
+    "aria-hidden": "true",
+    tabindex: "-1",
+    style:
+      "position:fixed;left:0;top:0;width:2em;height:2em;padding:0;border:0;outline:0;" +
+      "background:transparent;color:transparent;font-size:16px;",
+  });
+  ta.value = text;
+  // iOS Safari требует contentEditable=true и readOnly=false для Range + execCommand("copy") на HTTP
+  ta.contentEditable = "true";
+  ta.readOnly = false;
+  host.append(ta);
+  let ok = false;
   try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-    } else {
-      const ta = el("textarea", { style: "position:fixed;top:-1000px;opacity:0" });
-      ta.value = text;
-      document.body.append(ta);
-      ta.select();
-      document.execCommand("copy");
-      ta.remove();
+    ta.focus({ preventScroll: true });
+    ta.select();
+    const range = document.createRange();
+    range.selectNodeContents(ta);
+    const sel = window.getSelection();
+    if (sel) {
+      sel.removeAllRanges();
+      sel.addRange(range);
     }
-    toast(label);
-    return true;
+    ta.setSelectionRange(0, 999999);
+    ok = document.execCommand("copy");
   } catch {
-    toast("Не удалось скопировать", true);
-    return false;
+    ok = false;
+  } finally {
+    try { window.getSelection()?.removeAllRanges(); } catch {}
+    ta.remove();
+    if (prevFocus && prevFocus !== document.body && typeof prevFocus.focus === "function") {
+      try { prevFocus.focus({ preventScroll: true }); } catch {}
+    }
   }
+  return ok;
+}
+
+/** Копирование с поддержкой iOS Safari на HTTP (локальная сеть) и внутри модальных <dialog>. */
+export async function copyText(text, label = "Скопировано") {
+  const str = String(text ?? "");
+  if (!str) return false;
+  let ok = false;
+  if (navigator.clipboard?.writeText && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(str);
+      ok = true;
+    } catch {
+      ok = false;
+    }
+  }
+  if (!ok) {
+    ok = fallbackCopy(str);
+  }
+  toast(ok ? label : "Не удалось скопировать", !ok);
+  return ok;
 }
 
 // ---------------- Markdown + KaTeX + Highlight.js ----------------

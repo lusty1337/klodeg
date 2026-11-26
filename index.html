@@ -167,7 +167,7 @@
     <aside class="sidebar" id="sidebar" aria-label="Навигация">
       <div class="side-head">
         <div class="brand">
-          <div class="logo" data-brand-logo aria-hidden="true"></div>
+          <div class="logo only-neurohub" data-brand-logo aria-hidden="true"></div>
           <span data-brand-name>Claude</span>
         </div>
         <button class="icon-btn only-desktop" id="btn-collapse-sidebar" aria-label="Свернуть панель" title="Свернуть боковую панель"><span data-icon="sidebar" data-size="18"></span></button>
@@ -219,10 +219,10 @@
 
         <!-- Всплывающее меню профиля в стиле claude.ai (для Claude) -->
         <div class="account-wrap">
-          <div id="account-popover" class="account-popover hidden" role="menu">
+          <div id="account-popover" class="popover-menu account-popover" role="menu" aria-hidden="true">
             <div class="pop-head">
               <strong id="pop-username"></strong>
-              <span class="hint">План Pro · Claude Fable 8</span>
+              <span class="hint" id="pop-plan-sub">План Pro · Claude Mythos 5.5</span>
             </div>
             <div class="pop-sep"></div>
             <button type="button" class="pop-item" id="pop-settings" role="menuitem"><span data-icon="settings" data-size="16"></span><span>Настройки</span></button>
@@ -270,58 +270,84 @@
         </div>
         <div class="topbar-right">
           <span class="lock-badge hidden" id="lock-badge" title="Гости не могут пользоваться ИИ"><span data-icon="lock" data-size="14"></span><span class="lock-text">ИИ закрыт</span></span>
-          <button class="icon-btn only-mobile" id="btn-new-chat-top" aria-label="Новый чат"><span data-icon="edit" data-size="20"></span></button>
+          <button class="icon-btn only-mobile" id="btn-new-chat-top" aria-label="Новый чат"><span data-icon="edit" data-size="19"></span></button>
         </div>
       </header>
 
       <!-- ===== Чат ===== -->
-      <section class="view view-chat" data-view="chat">
+      <section class="view view-chat is-empty" data-view="chat">
         <div class="messages" id="messages">
-          <div class="thread" id="thread"></div>
+          <div class="thread hidden" id="thread"></div>
           <div class="thread-end" id="thread-end" aria-hidden="true"></div>
           <div class="empty-chat" id="empty-chat">
-            <div class="hello-mark only-claude" data-claude-mark aria-hidden="true"></div>
-            <h2 class="hello"><span id="hello-lead">С возвращением</span><span id="hello-name"></span></h2>
-            <p class="muted" id="empty-sub">Чем могу помочь сегодня?</p>
-            <div class="suggestions" id="suggestions"></div>
+            <div class="hello-row">
+              <div class="hello-mark only-claude" data-claude-mark aria-hidden="true"></div>
+              <h2 class="hello"><span id="hello-lead">С возвращением</span><span id="hello-name"></span></h2>
+            </div>
+            <p class="muted only-neurohub" id="empty-sub">Чем могу помочь сегодня?</p>
           </div>
         </div>
         <button class="scroll-down hidden" id="btn-scroll-down" aria-label="Вниз"><span data-icon="arrowDown"></span></button>
         <form class="composer" id="composer">
           <div class="quota-banner hidden" id="quota-banner" role="status"></div>
+          <button type="button" class="live-quota-bar hidden" id="topbar-quota" aria-label="Использование квоты" title="Текущая сессия · нажмите для подробностей">
+            <span class="lq-title">Сессия</span>
+            <span class="lq-track" aria-hidden="true"><span class="lq-fill" id="lq-fill"></span></span>
+            <span class="lq-label" id="lq-label">0%</span>
+          </button>
           <div class="composer-box embed" id="composer-box">
             <div class="att-row" id="att-row"></div>
-            <textarea id="input" rows="1" placeholder="Чем могу помочь сегодня?" aria-label="Сообщение" enterkeyhint="send"></textarea>
+            <textarea id="input" rows="1" placeholder="Чем я могу помочь сегодня?" aria-label="Сообщение" enterkeyhint="send"></textarea>
             <div class="composer-bar">
-              <button type="button" class="icon-btn" id="btn-attach" aria-label="Прикрепить файл" title="Фото, PDF, документ, код"><span data-icon="paperclip" data-size="19"></span></button>
-              <input type="file" id="file-input" multiple hidden>
-              <button type="button" class="chip" id="btn-web" aria-pressed="false" title="Искать в интернете"><span data-icon="globe" data-size="15"></span><span>Поиск</span></button>
-              <button type="button" class="chip" id="btn-think" aria-pressed="false" title="Глубокие размышления перед ответом (до ~25 с)"><span data-icon="brain" data-size="15"></span><span>Думать</span></button>
-              <span class="grow"></span>
-              <div class="model-picker-wrap only-claude">
-                <button type="button" class="model-pill-btn" id="btn-model-picker" aria-haspopup="true" aria-expanded="false">
-                  <span>Claude Fable 8</span>
-                  <span data-icon="chevronDown" data-size="14"></span>
+              <div class="plus-menu-wrap">
+                <button type="button" class="composer-plus-btn" id="btn-plus" aria-haspopup="menu" aria-expanded="false" aria-label="Вложения и поиск" title="Файлы и поиск">
+                  <span data-icon="plus" data-size="18"></span>
                 </button>
-                <div class="model-popover hidden" id="model-popover" role="menu">
-                  <div class="model-opt active">
-                    <div>
-                      <strong>Claude Fable 8</strong>
-                      <p>Флагманская модель Anthropic для сложных задач, кода и диалогов</p>
-                    </div>
-                    <span data-icon="check" data-size="16"></span>
-                  </div>
-                  <div class="pop-sep"></div>
-                  <label class="model-think-row">
-                    <div>
-                      <strong>Глубокое мышление</strong>
-                      <span>Обдумывает сложные задачи перед ответом</span>
-                    </div>
-                    <span class="switch mini"><input type="checkbox" id="model-pop-think"><span></span></span>
+                <div class="popover-menu plus-popover" id="plus-popover" role="menu" aria-hidden="true">
+                  <button type="button" class="pop-item" id="plus-attach" role="menuitem">
+                    <span data-icon="paperclip" data-size="16"></span>
+                    <span>Прикрепить файл</span>
+                  </button>
+                  <label class="pop-switch-row">
+                    <span class="pop-switch-ico" data-icon="globe" data-size="16"></span>
+                    <span class="pop-switch-title">Поиск в сети</span>
+                    <span class="switch mini"><input type="checkbox" id="plus-web-toggle"><span></span></span>
                   </label>
                 </div>
               </div>
-              <button type="submit" class="send-btn" id="btn-send" aria-label="Отправить"><span data-icon="arrowUp" data-size="19"></span></button>
+              <input type="file" id="file-input" multiple hidden>
+              <span class="grow"></span>
+              <div class="model-picker-wrap" id="model-picker-wrap">
+                <button type="button" class="model-pill-btn" id="btn-model-picker" aria-haspopup="true" aria-expanded="false">
+                  <span class="model-btn-name" id="model-btn-name">Mythos 5.5</span>
+                  <span class="model-btn-effort hidden" id="model-btn-effort"></span>
+                  <span class="model-btn-chev" data-icon="chevronDown" data-size="14"></span>
+                </button>
+                <div class="model-scrim" id="model-scrim" aria-hidden="true"></div>
+                <div class="popover-menu model-popover" id="model-popover" role="menu" aria-hidden="true">
+                  <div class="sheet-grip model-sheet-grip" aria-hidden="true"></div>
+                  <div class="model-list" id="model-list" role="radiogroup" aria-label="Выбор модели"></div>
+                  <div class="pop-sep"></div>
+                  <label class="model-think-row">
+                    <strong>Размышление</strong>
+                    <span class="switch mini"><input type="checkbox" id="model-pop-think"><span></span></span>
+                  </label>
+                  <div class="effort-block is-inactive" id="effort-block">
+                    <div class="effort-head">
+                      <span class="effort-title">Уровень раздумий</span>
+                      <span class="effort-hint" id="effort-hint">Выкл.</span>
+                    </div>
+                    <div class="effort-seg" id="effort-seg" role="radiogroup" aria-label="Уровень раздумий" style="--idx: 1">
+                      <span class="effort-thumb" aria-hidden="true"></span>
+                      <button type="button" data-effort="low" aria-pressed="false">Low</button>
+                      <button type="button" data-effort="medium" aria-pressed="true">Medium</button>
+                      <button type="button" data-effort="high" aria-pressed="false">High</button>
+                      <button type="button" data-effort="extra" aria-pressed="false">Extra</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <button type="submit" class="send-btn" id="btn-send" aria-label="Отправить"><span data-icon="arrowUp" data-size="17"></span></button>
             </div>
           </div>
           <p class="composer-hint" id="composer-hint">Claude может ошибаться. Проверяйте важную информацию.</p>
@@ -640,6 +666,7 @@
         <nav class="settings-nav" id="settings-nav" role="tablist" aria-label="Разделы настроек">
           <button type="button" class="settings-tab" data-tab="general" role="tab" aria-selected="true"><span data-icon="settings" data-size="16"></span><span>Общие</span></button>
           <button type="button" class="settings-tab" data-tab="usage" role="tab" aria-selected="false"><span data-icon="gauge" data-size="16"></span><span>Использование</span></button>
+          <button type="button" class="settings-tab hidden" id="settings-tab-api" data-tab="api" role="tab" aria-selected="false"><span data-icon="code" data-size="16"></span><span>API</span></button>
           <button type="button" class="settings-tab" data-tab="privacy" role="tab" aria-selected="false"><span data-icon="shield" data-size="16"></span><span>Приватность</span></button>
           <button type="button" class="settings-tab" data-tab="account" role="tab" aria-selected="false"><span data-icon="key" data-size="16"></span><span>Аккаунт</span></button>
         </nav>
@@ -689,6 +716,48 @@
               <h3>Лимиты использования плана</h3>
               <p class="hint">Учитывается длина диалога, вложения и режим глубокого мышления. Окна стартуют с первого сообщения и полностью сбрасываются по таймеру.</p>
               <div id="settings-usage-card" class="usage-card"></div>
+            </div>
+          </div>
+
+          <!-- Вкладка 2б: Локальный API (видна только пользователям с правом perm_api) -->
+          <div class="settings-panel hidden" data-panel="api">
+            <div class="settings-section">
+              <div class="api-head-row">
+                <h3>Локальный API</h3>
+                <span class="status-tag on">Только Wi-Fi / LAN</span>
+              </div>
+              <p class="hint">OpenAI-совместимый доступ для сторонних приложений на iPhone (KODO, Chatbox, Pal Chat, Команды iOS). Работает только в домашней сети.</p>
+
+              <div class="api-card">
+                <div class="field">
+                  <span>HTTPS-адрес <span class="muted">· для KODO и приложений iOS</span></span>
+                  <div class="api-input-row">
+                    <input id="api-base-url" class="mono" type="text" readonly value="—">
+                    <button type="button" class="btn small" id="btn-copy-api-url"><span data-icon="copy" data-size="14"></span>Копировать</button>
+                  </div>
+                  <span class="hint" id="api-alt-urls"></span>
+                </div>
+
+                <div class="field">
+                  <span>API-ключ</span>
+                  <div class="api-input-row">
+                    <input id="api-key-input" class="mono" type="password" readonly value="">
+                    <button type="button" class="icon-btn" id="btn-toggle-api-key" aria-label="Показать ключ" title="Показать / скрыть ключ"><span data-icon="eye" data-size="17"></span></button>
+                    <button type="button" class="btn small" id="btn-copy-api-key"><span data-icon="copy" data-size="14"></span>Копировать</button>
+                  </div>
+                </div>
+
+                <div class="api-actions">
+                  <a class="btn small" id="btn-download-ca" href="#"><span data-icon="download" data-size="14"></span>Сертификат для iPhone</a>
+                  <button type="button" class="btn small ghost" id="btn-rotate-api-key"><span data-icon="refresh" data-size="14"></span>Перевыпустить ключ</button>
+                </div>
+                <p class="hint" id="api-ca-hint">Чтобы iPhone доверял локальному HTTPS в KODO: скачай сертификат в Safari → Настройки → Профиль загружен → Установить → Основные → Об этом устройстве → Доверие сертификатам → включить «NeuroHub Local CA».</p>
+              </div>
+
+              <div class="field">
+                <span>Модели <span class="muted">· нажми, чтобы скопировать ID</span></span>
+                <div class="api-models" id="api-models-list"></div>
+              </div>
             </div>
           </div>
 
@@ -746,7 +815,7 @@
       </div>
       <div class="sheet-body">
         <p id="tos-intro" class="tos-intro">
-          Вы общаетесь с моделью <strong>Claude Fable 8</strong> от <strong>Anthropic</strong>.
+          Вы общаетесь с моделью <strong>Claude Mythos 5.5</strong> от <strong>Anthropic</strong>.
           Перед началом работы ознакомьтесь с
           <button type="button" class="link-btn" id="tos-toggle-link">Условиями использования</button>
           и подтвердите согласие.
@@ -813,7 +882,7 @@
     </form>
   </dialog>
 
-  <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+  <div id="toasts" class="toasts" popover="manual" role="status" aria-live="polite"></div>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>

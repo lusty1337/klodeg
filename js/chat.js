@@ -1,18 +1,46 @@
-// режим "Чат": фоновая генерация (переживает сворачивание и смену чата), скрытые раздумья для гостей, плавный стрим
+// режим "Чат": 5 моделей Claude, уровень Effort, фоновая генерация, живая квота и плавный стрим
 import { api, stream, streamGet, upload, fileUrl, resolveApiBase } from "./api.js";
 import {
-  $, el, icon, setIcon, setChildren, toast, renderMarkdown, lightbox, copyText, ask, isMobile,
+  $, $$, el, icon, setIcon, setChildren, toast, renderMarkdown, lightbox, copyText, ask, isMobile,
   CLAUDE_STARBURST_SVG,
 } from "./ui.js";
+
+const DEFAULT_MODELS = [
+  { id: "mythos-5.5", name: "Mythos 5.5", full_name: "Claude Mythos 5.5" },
+  { id: "opus-5.5", name: "Opus 5.5", full_name: "Claude Opus 5.5" },
+  { id: "sonnet-5.5", name: "Sonnet 5.5", full_name: "Claude Sonnet 5.5" },
+  { id: "fable-5.2", name: "Fable 5.2", full_name: "Claude Fable 5.2" },
+  { id: "haiku-5.5", name: "Haiku 5.5", full_name: "Claude Haiku 5.5" },
+];
+
+const EFFORT_INFO = {
+  low: { idx: 0, label: "Low", hint: "Low" },
+  medium: { idx: 1, label: "Medium", hint: "Medium" },
+  high: { idx: 2, label: "High", hint: "High" },
+  extra: { idx: 3, label: "Extra", hint: "Extra" },
+};
+
+function loadSavedModel() {
+  const v = localStorage.getItem("nh_model_v1");
+  return DEFAULT_MODELS.some((m) => m.id === v) ? v : "mythos-5.5";
+}
+
+function loadSavedEffort() {
+  const v = localStorage.getItem("nh_effort_v1");
+  return v && EFFORT_INFO[v] ? v : "medium";
+}
 
 const S = {
   chats: [],
   chatId: null,
   messages: [],
   pending: [],
-  // поиск включён по умолчанию - модель сама решает, когда проверить факты в интернете
+  models: DEFAULT_MODELS,
+  model: loadSavedModel(),
+  effort: loadSavedEffort(),
+  // поиск включён по умолчанию - управляется из меню "+" без лишних кнопок на панели ввода
   web: localStorage.getItem("nh_web_v2") !== "0",
-  // по умолчанию "Думать" выключено ради быстрых ответов (включается кнопкой или из меню модели)
+  // по умолчанию "Размышление" выключено; без него уровень Effort не влияет на генерацию
   think: localStorage.getItem("nh_think_v2") === "1",
   isAdmin: false,
   generatingChats: new Set(),
@@ -20,23 +48,144 @@ const S = {
   streamingChatId: null,
   filter: "",
   onUsage: () => {},
+  onDraining: () => {},
 };
 const E = {};
 
-const SUGGESTIONS = [
-  ["Объясни просто", "как работает нейросеть-трансформер"],
-  ["Напиши код", "скрипт на Python, который переименует фото по дате съёмки"],
-  ["Помоги придумать", "идею для короткометражки в жанре киберпанк"],
-  ["Разбери", "чем отличается рекурсия от итерации на живых примерах"],
-];
+export function getSelectedModel() {
+  return S.models.find((m) => m.id === S.model) || S.models[0];
+}
+
+function modelById(id) {
+  return S.models.find((m) => m.id === id) || null;
+}
 
 export function setChatRole(role) {
   S.isAdmin = role === "admin";
 }
 
-export function initChat({ onUsage }) {
+function closeComposerMenus() {
+  E.plusPop?.classList.remove("is-open");
+  E.plusPop?.setAttribute("aria-hidden", "true");
+  E.plusBtn?.setAttribute("aria-expanded", "false");
+  E.modelPop?.classList.remove("is-open");
+  E.modelPop?.setAttribute("aria-hidden", "true");
+  E.modelBtn?.setAttribute("aria-expanded", "false");
+  E.modelScrim?.classList.remove("is-open");
+}
+
+function placeDesktopPopover(trigger, pop) {
+  if (!trigger || !pop || isMobile()) {
+    pop?.classList.remove("open-down");
+    pop?.style.removeProperty("max-height");
+    return;
+  }
+  const rect = trigger.getBoundingClientRect();
+  const vh = window.innerHeight || 800;
+  const spaceAbove = rect.top - 16;
+  const spaceBelow = vh - rect.bottom - 16;
+  // на пустом экране открываем вниз, если снизу достаточно места; иначе туда, где места больше
+  const openDown = E.view?.classList.contains("is-empty")
+    ? (spaceBelow >= 340 || spaceBelow >= spaceAbove)
+    : (spaceAbove < 360 && spaceBelow > spaceAbove);
+  pop.classList.toggle("open-down", openDown);
+  const avail = Math.max(220, Math.floor((openDown ? spaceBelow : spaceAbove) - 10));
+  pop.style.maxHeight = `${avail}px`;
+}
+
+function openPlusMenu() {
+  const willOpen = !E.plusPop.classList.contains("is-open");
+  window.dispatchEvent(new CustomEvent("nh:close-popovers"));
+  if (willOpen) {
+    placeDesktopPopover(E.plusBtn, E.plusPop);
+    E.plusPop.classList.add("is-open");
+    E.plusPop.setAttribute("aria-hidden", "false");
+    E.plusBtn.setAttribute("aria-expanded", "true");
+  }
+}
+
+function openModelMenu() {
+  const willOpen = !E.modelPop.classList.contains("is-open");
+  window.dispatchEvent(new CustomEvent("nh:close-popovers"));
+  if (willOpen) {
+    placeDesktopPopover(E.modelBtn, E.modelPop);
+    E.modelPop.classList.add("is-open");
+    E.modelPop.setAttribute("aria-hidden", "false");
+    E.modelBtn.setAttribute("aria-expanded", "true");
+    E.modelScrim?.classList.add("is-open");
+  }
+}
+
+function renderModelList() {
+  if (!E.modelList) return;
+  setChildren(
+    E.modelList,
+    S.models.map((m) =>
+      el(
+        "button",
+        {
+          type: "button",
+          class: "model-opt-btn",
+          role: "menuitemradio",
+          "aria-checked": String(m.id === S.model),
+          onclick: () => selectModel(m.id),
+        },
+        el("span", { text: m.name }),
+        el("span", { class: "model-opt-check" }, icon("check", 15))
+      )
+    )
+  );
+}
+
+function selectModel(id) {
+  if (!S.models.some((m) => m.id === id)) return;
+  S.model = id;
+  try { localStorage.setItem("nh_model_v1", id); } catch {}
+  syncModelUi();
+  window.dispatchEvent(new CustomEvent("nh:model-changed", { detail: getSelectedModel() }));
+  if (!isMobile()) {
+    setTimeout(() => closeComposerMenus(), 110);
+  }
+}
+
+function selectEffort(eff) {
+  if (!EFFORT_INFO[eff]) return;
+  S.effort = eff;
+  try { localStorage.setItem("nh_effort_v1", eff); } catch {}
+  syncModelUi();
+}
+
+function syncModelUi() {
+  const m = getSelectedModel();
+  const eff = EFFORT_INFO[S.effort] || EFFORT_INFO.medium;
+  if (E.modelBtnName) E.modelBtnName.textContent = m.name;
+  if (E.modelBtnEffort) {
+    E.modelBtnEffort.textContent = `· ${eff.label}`;
+    E.modelBtnEffort.classList.toggle("hidden", !S.think);
+  }
+  if (E.modelThink) E.modelThink.checked = S.think;
+  if (E.webToggle) E.webToggle.checked = S.web;
+  if (E.effortBlock) E.effortBlock.classList.toggle("is-inactive", !S.think);
+  if (E.effortHint) E.effortHint.textContent = S.think ? eff.hint : "Выкл.";
+  if (E.effortSeg) {
+    E.effortSeg.style.setProperty("--idx", String(eff.idx));
+    $$("button[data-effort]", E.effortSeg).forEach((b) => {
+      b.setAttribute("aria-pressed", String(b.dataset.effort === S.effort));
+    });
+  }
+  if (E.modelList) {
+    $$(".model-opt-btn", E.modelList).forEach((b, i) => {
+      const item = S.models[i];
+      if (item) b.setAttribute("aria-checked", String(item.id === S.model));
+    });
+  }
+}
+
+export function initChat({ onUsage, onDraining }) {
   S.onUsage = onUsage;
+  S.onDraining = onDraining || (() => {});
   Object.assign(E, {
+    view: $(".view-chat"),
     list: $("#chat-list"),
     scroller: $("#messages"),
     thread: $("#thread"),
@@ -44,9 +193,21 @@ export function initChat({ onUsage }) {
     input: $("#input"),
     form: $("#composer"),
     send: $("#btn-send"),
-    web: $("#btn-web"),
-    think: $("#btn-think"),
+    plusBtn: $("#btn-plus"),
+    plusPop: $("#plus-popover"),
+    plusAttach: $("#plus-attach"),
+    webToggle: $("#plus-web-toggle"),
+    modelBtn: $("#btn-model-picker"),
+    modelBtnName: $("#model-btn-name"),
+    modelBtnEffort: $("#model-btn-effort"),
+    modelPop: $("#model-popover"),
+    modelScrim: $("#model-scrim"),
+    modelClose: $("#btn-model-close"),
+    modelList: $("#model-list"),
     modelThink: $("#model-pop-think"),
+    effortBlock: $("#effort-block"),
+    effortSeg: $("#effort-seg"),
+    effortHint: $("#effort-hint"),
     file: $("#file-input"),
     attRow: $("#att-row"),
     box: $("#composer-box"),
@@ -78,24 +239,55 @@ export function initChat({ onUsage }) {
       files.forEach(addFile);
     }
   });
-  $("#btn-attach").addEventListener("click", () => E.file.click());
+
+  E.plusBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openPlusMenu();
+  });
+  E.plusPop?.addEventListener("click", (e) => e.stopPropagation());
+  E.plusAttach?.addEventListener("click", () => {
+    closeComposerMenus();
+    E.file.click();
+  });
   E.file.addEventListener("change", () => {
     [...E.file.files].forEach(addFile);
     E.file.value = "";
   });
-  E.web.addEventListener("click", () => {
-    S.web = !S.web;
-    localStorage.setItem("nh_web_v2", S.web ? "1" : "0");
-    syncToggles();
+  E.webToggle?.addEventListener("change", () => {
+    S.web = E.webToggle.checked;
+    try { localStorage.setItem("nh_web_v2", S.web ? "1" : "0"); } catch {}
+    syncModelUi();
   });
-  const toggleThink = (next, notify = true) => {
-    S.think = next;
-    localStorage.setItem("nh_think_v2", S.think ? "1" : "0");
-    syncToggles();
-    if (notify) toast(S.think ? "Глубокое мышление включено" : "Быстрые ответы без размышлений");
-  };
-  E.think.addEventListener("click", () => toggleThink(!S.think, true));
-  E.modelThink?.addEventListener("change", () => toggleThink(E.modelThink.checked, true));
+
+  E.modelBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openModelMenu();
+  });
+  E.modelPop?.addEventListener("click", (e) => e.stopPropagation());
+  E.modelClose?.addEventListener("click", closeComposerMenus);
+  E.modelScrim?.addEventListener("click", closeComposerMenus);
+
+  E.modelThink?.addEventListener("change", () => {
+    S.think = E.modelThink.checked;
+    try { localStorage.setItem("nh_think_v2", S.think ? "1" : "0"); } catch {}
+    syncModelUi();
+  });
+  $$("button[data-effort]", E.effortSeg).forEach((btn) => {
+    btn.addEventListener("click", () => selectEffort(btn.dataset.effort));
+  });
+
+  // синхронизация со списком моделей с бэкенда, если он обновится
+  window.addEventListener("nh:status", (ev) => {
+    const list = ev.detail?.models;
+    if (Array.isArray(list) && list.length) {
+      S.models = list;
+      if (!S.models.some((m) => m.id === S.model)) S.model = S.models[0].id;
+      renderModelList();
+      syncModelUi();
+    }
+  });
+  window.addEventListener("nh:close-popovers", closeComposerMenus);
+  window.addEventListener("resize", syncTitle);
 
   for (const ev of ["dragenter", "dragover"]) {
     E.box.addEventListener(ev, (e) => {
@@ -127,22 +319,8 @@ export function initChat({ onUsage }) {
   });
   window.addEventListener("online", () => resyncVisibleChat());
 
-  setChildren(
-    $("#suggestions"),
-    SUGGESTIONS.map(([t, d]) =>
-      el("button", {
-        type: "button",
-        class: "suggestion",
-        onclick: () => {
-          E.input.value = `${t} ${d}`;
-          autosize();
-          syncSend();
-          E.input.focus();
-        },
-      }, el("span", {}, el("strong", { text: t }), ` ${d}`), icon("arrowRight", 16))
-    )
-  );
-  syncToggles();
+  renderModelList();
+  syncModelUi();
   syncSend();
 }
 
@@ -154,15 +332,9 @@ function isCurrentGenerating() {
   return Boolean(S.chatId && (S.streamingChatId === S.chatId || S.generatingChats.has(S.chatId)));
 }
 
-function syncToggles() {
-  E.web.setAttribute("aria-pressed", String(S.web));
-  E.think.setAttribute("aria-pressed", String(S.think));
-  if (E.modelThink) E.modelThink.checked = S.think;
-}
-
 function syncSend() {
   const busy = isCurrentGenerating();
-  setIcon(E.send, busy ? "stop" : "arrowUp", 19);
+  setIcon(E.send, busy ? "stop" : "arrowUp", 18);
   E.send.setAttribute("aria-label", busy ? "Остановить" : "Отправить");
   E.send.classList.toggle("stop", busy);
   E.send.disabled = !busy && !E.input.value.trim() && !S.pending.some((p) => p.meta);
@@ -174,9 +346,18 @@ function autosize() {
 }
 
 function syncTitle() {
-  if ($(".view-chat").classList.contains("hidden")) return;
+  if (!E.view || E.view.classList.contains("hidden")) return;
+  const titleEl = $("#topbar-title");
   const c = S.chats.find((x) => x.id === S.chatId);
-  $("#topbar-title").textContent = c ? c.title : "Новый чат";
+  const empty = !S.messages.length && !isCurrentGenerating();
+  if (isClaudeBrand() && empty) {
+    // в мобильном приложении Claude в пустом чате по центру стоит логотип-слово "Claude", на ПК шапка чистая
+    titleEl.textContent = isMobile() ? "Claude" : "";
+    titleEl.classList.toggle("is-brand-wordmark", isMobile());
+  } else {
+    titleEl.textContent = c ? c.title : "Новый чат";
+    titleEl.classList.remove("is-brand-wordmark");
+  }
 }
 
 function detachViewStream() {
@@ -186,11 +367,12 @@ function detachViewStream() {
     S.viewAbort = null;
   }
   S.streamingChatId = null;
+  S.onDraining(false);
 }
 
 async function resyncVisibleChat() {
   if (!S.chatId || S.streamingChatId === S.chatId) return;
-  if ($(".view-chat").classList.contains("hidden")) return;
+  if (E.view.classList.contains("hidden")) return;
   try {
     const data = await api(`/api/chats/${S.chatId}`);
     if (data.generating) {
@@ -350,6 +532,7 @@ async function openChat(id, showChatMode = true) {
 // ---------------- отрисовка ----------------
 function renderMessages(animate = false) {
   const has = S.messages.length > 0;
+  E.view?.classList.toggle("is-empty", !has);
   E.empty.classList.toggle("hidden", has);
   E.thread.classList.toggle("hidden", !has);
   setChildren(
@@ -362,6 +545,7 @@ function renderMessages(animate = false) {
     E.thread.classList.add("thread-fade");
   }
   markLast();
+  syncTitle();
   scrollDown(true);
 }
 
@@ -485,7 +669,7 @@ function assistantEl(m, idx, animate = false) {
     root,
     setReasoning(text, live = false) {
       if (!S.isAdmin || !thinkEl) return;
-      thinkEl.classList.toggle("hidden", !text);
+      thinkEl.classList.toggle("hidden", !text && !live);
       thinkEl.classList.toggle("live", live);
       thinkBody.textContent = text;
       if (live) thinkBody.scrollTop = thinkBody.scrollHeight;
@@ -496,12 +680,12 @@ function assistantEl(m, idx, animate = false) {
     collapseAdminThink() {
       if (S.isAdmin && thinkEl) thinkEl.open = false;
     },
-    setGuestThinking(active, hasThought = false, seconds = 0) {
+    setGuestThinking(active, hasThought = false, seconds = 0, phase = "Думаю…") {
       if (S.isAdmin || !thinkPill) return;
       if (active) {
         thinkPill.classList.remove("hidden");
         thinkPill.classList.add("live");
-        thinkPillText.textContent = "Думаю…";
+        thinkPillText.textContent = seconds > 0 ? `${phase} · ${seconds} с` : phase;
       } else if (hasThought) {
         thinkPill.classList.remove("hidden");
         thinkPill.classList.remove("live");
@@ -542,6 +726,9 @@ function assistantEl(m, idx, animate = false) {
     },
     setActions(msg, i) {
       const isLast = i === S.messages.length - 1;
+      const mInfo = msg.model ? modelById(msg.model) : null;
+      const effInfo = msg.effort ? EFFORT_INFO[msg.effort] : null;
+      const modelTag = mInfo ? (effInfo ? `${mInfo.name} · ${effInfo.label}` : mInfo.name) : "";
       setChildren(
         actions,
         actBtn("copy", "", () => copyText(msg.content || "", "Ответ скопирован"), "Копировать"),
@@ -549,6 +736,7 @@ function assistantEl(m, idx, animate = false) {
         actBtn("shorter", "", () => regenerate(i, "shorter"), "Короче"),
         actBtn("longer", "", () => regenerate(i, "longer"), "Подробнее"),
         !isLast && msg.id ? actBtn("rewind", "", () => rewindTo(msg, i), "Откатить диалог сюда") : null,
+        modelTag ? el("span", { class: "msg-model-tag", text: modelTag }) : null,
         S.isAdmin && msg.stats?.gen_tps
           ? el("span", { class: "stat", title: `Промпт: ${msg.stats.prompt_tps} ток/с`, text: `${msg.stats.gen_tps} ток/с` })
           : null
@@ -665,6 +853,7 @@ function renderPending() {
 // ---------------- отправка и переподключение к фоновому стриму ----------------
 async function send(resend) {
   if (isCurrentGenerating()) return;
+  closeComposerMenus();
   const content = resend ? resend.content : E.input.value.trim();
   if (!resend && S.pending.some((p) => p.loading)) return toast("Подожди, файл ещё загружается");
   const atts = resend ? resend.attachments : S.pending.filter((p) => p.meta).map((p) => p.meta);
@@ -685,7 +874,6 @@ async function send(resend) {
     // сразу показываем заголовок чата в сайдбаре, чтобы при переключении чата не висело "Новый чат"
     curChat.title = (content || (atts[0]?.name ?? "Чат")).replace(/\n/g, " ").slice(0, 60);
     renderList();
-    syncTitle();
   }
   if (!resend) {
     E.input.value = "";
@@ -693,6 +881,7 @@ async function send(resend) {
     S.pending = [];
     renderPending();
   }
+  E.view?.classList.remove("is-empty");
   E.empty.classList.add("hidden");
   E.thread.classList.remove("hidden");
 
@@ -704,6 +893,7 @@ async function send(resend) {
     S.messages.push(userMsg);
     E.thread.append(userEl(userMsg, S.messages.length - 1, true));
   }
+  syncTitle();
 
   const chatId = S.chatId;
   const payload = {
@@ -711,6 +901,8 @@ async function send(resend) {
     attachments: atts.map((a) => a.id),
     web_search: S.web,
     think: S.think,
+    model: S.model,
+    effort: S.effort,
     reuse_last_user: Boolean(resend?.reuse),
     regen_mode: resend?.mode && resend.mode !== "retry" ? resend.mode : null,
   };
@@ -720,8 +912,10 @@ async function send(resend) {
 
 async function attachToRunningChat(chatId) {
   if (S.chatId !== chatId || S.streamingChatId === chatId) return;
+  E.view?.classList.remove("is-empty");
   E.empty.classList.add("hidden");
   E.thread.classList.remove("hidden");
+  syncTitle();
   const lastUser = [...S.messages].reverse().find((m) => m.role === "user") || null;
   await runStreamView({ chatId, userMsg: lastUser, startPayload: null, contentBackup: null });
 }
@@ -732,10 +926,21 @@ async function runStreamView({ chatId, userMsg, startPayload, contentBackup }) {
   S.viewAbort = abort;
   S.streamingChatId = chatId;
   S.generatingChats.add(chatId);
+  S.onDraining(true);
   renderList();
   syncSend();
 
-  const asst = { id: null, role: "assistant", content: "", reasoning: "", has_thinking: false, tools: [], stats: null };
+  const asst = {
+    id: null,
+    role: "assistant",
+    content: "",
+    reasoning: "",
+    model: startPayload?.model || S.model,
+    effort: startPayload?.think ? (startPayload.effort || S.effort) : "",
+    has_thinking: false,
+    tools: [],
+    stats: null,
+  };
   const view = assistantEl(asst, -1, true);
   view.setTyping(true);
   E.thread.append(view.root);
@@ -743,15 +948,38 @@ async function runStreamView({ chatId, userMsg, startPayload, contentBackup }) {
   scrollDown(true);
 
   const t0 = performance.now();
-  let thinkEnd = 0;
+  let thinkStart = 0;
   let thinkingActive = false;
+  let thinkPhase = "Думаю…";
   let thinkSec = 0;
+  let thinkTick = 0;
   let lastPaint = 0;
   let paintTimer = 0;
   let lastChip = null;
   let finishedOnServer = false;
   let syncNeeded = false;
   let failed = false;
+
+  const stopThinkTimer = () => {
+    if (thinkTick) {
+      clearInterval(thinkTick);
+      thinkTick = 0;
+    }
+  };
+
+  const ensureThinkTimer = () => {
+    if (!thinkStart) thinkStart = performance.now();
+    if (thinkTick) return;
+    thinkTick = window.setInterval(() => {
+      if (!thinkingActive) return stopThinkTimer();
+      const sec = Math.max(1, Math.floor((performance.now() - thinkStart) / 1000));
+      if (S.isAdmin) {
+        view.setThinkLabel(`${thinkPhase} · ${sec} с`);
+      } else {
+        view.setGuestThinking(true, true, sec, thinkPhase);
+      }
+    }, 500);
+  };
 
   const paintNow = () => {
     paintTimer = 0;
@@ -761,13 +989,14 @@ async function runStreamView({ chatId, userMsg, startPayload, contentBackup }) {
     } else if (!thinkingActive) {
       view.setTyping(true);
     } else {
-      // пока модель думает (у гостей), убираем лишнюю звёздочку в теле - работает индикатор "Думаю..."
+      // пока модель думает, убираем лишнюю звёздочку в теле - работает верхний индикатор размышления
       view.setContent("");
     }
     if (S.isAdmin) {
-      view.setReasoning(asst.reasoning, !asst.content && Boolean(asst.reasoning));
+      view.setReasoning(asst.reasoning, thinkingActive || (!asst.content && Boolean(asst.reasoning)));
     } else {
-      view.setGuestThinking(thinkingActive, asst.has_thinking, thinkSec);
+      const liveSec = thinkingActive && thinkStart ? Math.floor((performance.now() - thinkStart) / 1000) : thinkSec;
+      view.setGuestThinking(thinkingActive, asst.has_thinking, liveSec, thinkPhase);
     }
     scrollDown();
   };
@@ -789,9 +1018,14 @@ async function runStreamView({ chatId, userMsg, startPayload, contentBackup }) {
         view.setStatus(ev.status || "");
         asst.content = ev.content || "";
         asst.reasoning = S.isAdmin ? (ev.reasoning || "") : "";
+        if (ev.model) asst.model = ev.model;
+        if (ev.effort !== undefined) asst.effort = ev.effort;
         asst.has_thinking = Boolean(ev.has_thinking || ev.thinking);
         thinkingActive = Boolean(ev.thinking);
+        if (ev.think_phase) thinkPhase = ev.think_phase;
         thinkSec = ev.think_sec || 0;
+        if (thinkingActive) ensureThinkTimer();
+        if (ev.live_usage) S.onUsage(ev.live_usage, { live: true });
         asst.tools = [];
         view.clearTools();
         for (const t of ev.tools || []) {
@@ -803,11 +1037,25 @@ async function runStreamView({ chatId, userMsg, startPayload, contentBackup }) {
       case "status":
         view.setStatus(ev.text || "");
         break;
+      case "usage_live":
+        if (ev.usage) S.onUsage(ev.usage, { live: true });
+        break;
       case "thinking":
         view.setStatus("");
         thinkingActive = Boolean(ev.active);
-        if (ev.active) asst.has_thinking = true;
-        if (ev.seconds) thinkSec = ev.seconds;
+        if (ev.phase) thinkPhase = ev.phase;
+        if (ev.active) {
+          asst.has_thinking = true;
+          ensureThinkTimer();
+          if (S.isAdmin) view.setThinkLabel(thinkPhase);
+        } else {
+          stopThinkTimer();
+          if (ev.seconds) thinkSec = ev.seconds;
+          if (S.isAdmin) {
+            view.setThinkLabel(thinkSec > 0 ? `Размышления · ${thinkSec} с` : "Размышления");
+            view.collapseAdminThink();
+          }
+        }
         paintNow();
         break;
       case "reasoning":
@@ -815,19 +1063,23 @@ async function runStreamView({ chatId, userMsg, startPayload, contentBackup }) {
         asst.has_thinking = true;
         if (S.isAdmin) {
           asst.reasoning += ev.text || "";
-          if (!asst.content) view.setThinkLabel("Размышляю…");
+          if (!asst.content) {
+            thinkingActive = true;
+            ensureThinkTimer();
+          }
           schedulePaint();
         } else {
           thinkingActive = true;
+          ensureThinkTimer();
           paintNow();
         }
         break;
       case "content":
         view.setStatus("");
         if (!asst.content && (asst.reasoning || thinkingActive)) {
-          thinkEnd = performance.now();
+          stopThinkTimer();
           thinkingActive = false;
-          if (!thinkSec) thinkSec = Math.max(1, Math.round((thinkEnd - t0) / 1000));
+          if (!thinkSec) thinkSec = Math.max(1, Math.round((performance.now() - (thinkStart || t0)) / 1000));
           if (S.isAdmin) {
             view.setThinkLabel(`Размышления · ${thinkSec} с`);
             view.collapseAdminThink();
@@ -846,11 +1098,15 @@ async function runStreamView({ chatId, userMsg, startPayload, contentBackup }) {
       case "done":
         finishedOnServer = true;
         thinkingActive = false;
+        stopThinkTimer();
         if (ev.has_thinking) asst.has_thinking = true;
         if (ev.think_sec) thinkSec = ev.think_sec;
+        if (ev.model) asst.model = ev.model;
+        if (ev.effort !== undefined) asst.effort = ev.effort;
         asst.id = ev.message_id || null;
         asst.stats = ev.stats || null;
-        if (ev.usage) S.onUsage(ev.usage);
+        S.onDraining(false);
+        if (ev.usage) S.onUsage(ev.usage, { live: false });
         break;
       case "sync":
         finishedOnServer = true;
@@ -860,6 +1116,8 @@ async function runStreamView({ chatId, userMsg, startPayload, contentBackup }) {
         finishedOnServer = true;
         failed = true;
         thinkingActive = false;
+        stopThinkTimer();
+        S.onDraining(false);
         view.error(ev.message || "Ошибка генерации");
         break;
     }
@@ -870,16 +1128,13 @@ async function runStreamView({ chatId, userMsg, startPayload, contentBackup }) {
       try {
         await stream(`/api/chats/${chatId}/messages`, startPayload, onEvent, abort.signal);
       } catch (err) {
-        // ошибка валидации/лимита/бана (HTTP 4xx) - не ретраим, сразу показываем и возвращаем текст
         if (err.name === "AbortError" || err.status) throw err;
-        // сетевой разрыв при сворачивании вкладки или смене URL туннеля -> переподключаемся к фоновой задаче
         await reconnectLoop(chatId, onEvent, abort.signal, () => finishedOnServer);
       }
     } else {
       await reconnectLoop(chatId, onEvent, abort.signal, () => finishedOnServer, true);
     }
 
-    // если поток закрылся без done/error (телефон усыпил сокет), тихо переподключаемся, пока чат открыт
     if (!finishedOnServer && !abort.signal.aborted) {
       await reconnectLoop(chatId, onEvent, abort.signal, () => finishedOnServer, true);
     }
@@ -892,11 +1147,18 @@ async function runStreamView({ chatId, userMsg, startPayload, contentBackup }) {
         S.messages.pop();
         E.input.value = contentBackup;
         autosize();
+        if (!S.messages.length) {
+          E.view?.classList.add("is-empty");
+          E.empty.classList.remove("hidden");
+          E.thread.classList.add("hidden");
+        }
       }
     }
   } finally {
     if (paintTimer) clearTimeout(paintTimer);
+    stopThinkTimer();
     view.setStatus("");
+    S.onDraining(false);
     if (S.viewAbort === abort) S.viewAbort = null;
     if (S.streamingChatId === chatId) S.streamingChatId = null;
 
@@ -906,7 +1168,6 @@ async function runStreamView({ chatId, userMsg, startPayload, contentBackup }) {
     }
     syncSend();
 
-    // если пользователь переключился на другой чат - не трогаем DOM нового чата
     if (S.chatId !== chatId) return;
 
     if (syncNeeded) {
@@ -915,7 +1176,6 @@ async function runStreamView({ chatId, userMsg, startPayload, contentBackup }) {
       paintNow();
       if (asst.content.trim() || asst.tools.length) {
         S.messages.push(asst);
-        // обновляем кнопки действий прямо на месте без перерисовки всего треда (ноль мигания экрана)
         view.setActions(asst, S.messages.length - 1);
         markLast();
       } else if (!failed) {
@@ -925,8 +1185,6 @@ async function runStreamView({ chatId, userMsg, startPayload, contentBackup }) {
         view.setContent("");
       }
       refreshTitle(chatId);
-    } else if (abort.signal.aborted) {
-      // клиент сам отцепился от просмотра (не стоп)
     }
   }
 }
@@ -982,6 +1240,7 @@ async function stopCurrent() {
     await api(`/api/chats/${cid}/stop`, { method: "POST" });
   } catch {}
   S.generatingChats.delete(cid);
+  S.onDraining(false);
   renderList();
   syncSend();
 }

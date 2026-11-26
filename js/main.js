@@ -1,10 +1,10 @@
 // точка входа: бренд (NeuroHub / Claude), сворачиваемый сайдбар, меню профиля, вкладки настроек, бан и квоты
 import { api, auth, resolveApiBase } from "./api.js";
 import {
-  $, $$, el, toast, fmtReset, fmtDateTime, hydrateIcons, setIcon, isMobile,
+  $, $$, el, toast, fmtReset, fmtDateTime, hydrateIcons, setIcon, isMobile, copyText, ask,
   CLAUDE_STARBURST_SVG, NEUROHUB_LOGO_SVG,
 } from "./ui.js";
-import { initChat, loadChats, newChat, setChatRole } from "./chat.js";
+import { initChat, loadChats, newChat, setChatRole, getSelectedModel } from "./chat.js";
 import { initAdmin, loadAdmin } from "./admin.js";
 import { initImage, loadImageMode } from "./image.js";
 import { initVoice, loadVoiceMode, stopCall } from "./voice.js";
@@ -30,6 +30,14 @@ function defaultHostBrand() {
   return isLocal ? "neurohub" : "claude";
 }
 
+function timeGreeting() {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 12) return "Доброе утро";
+  if (h >= 12 && h < 18) return "Добрый день";
+  if (h >= 18 && h < 23) return "Добрый вечер";
+  return "Доброй ночи";
+}
+
 function applyBrand(brand, persist = false) {
   const isClaude = brand === "claude" || brand === "klodeg";
   const key = isClaude ? "claude" : "neurohub";
@@ -43,7 +51,7 @@ function applyBrand(brand, persist = false) {
   if (fav) fav.setAttribute("href", isClaude ? FAVICON_CLAUDE : FAVICON_NH);
   $$("[data-brand-logo]").forEach((n) => (n.innerHTML = isClaude ? CLAUDE_STARBURST_SVG : NEUROHUB_LOGO_SVG));
   $$("[data-brand-name]").forEach((n) => (n.textContent = title));
-  $("#hello-lead").textContent = isClaude ? "С возвращением" : "Привет";
+  $("#hello-lead").textContent = isClaude ? timeGreeting() : "Привет";
   $("#empty-sub").textContent = isClaude
     ? "Чем могу помочь сегодня?"
     : "Чем займёмся? Можно приложить фото, PDF или код.";
@@ -165,41 +173,35 @@ $("#sidebar").addEventListener("touchend", (e) => {
   touchX = null;
 });
 
-// ---------------- всплывающие меню (профиль Claude и выбор модели) ----------------
+// ---------------- всплывающие меню (профиль Claude, "+" и выбор модели) ----------------
 const accPop = $("#account-popover");
 const accBtn = $("#btn-account-menu");
-const modPop = $("#model-popover");
-const modBtn = $("#btn-model-picker");
+
+function closeAccountPopover() {
+  accPop?.classList.remove("is-open");
+  accPop?.setAttribute("aria-hidden", "true");
+  accBtn?.setAttribute("aria-expanded", "false");
+}
 
 function closePopovers() {
-  accPop?.classList.add("hidden");
-  accBtn?.setAttribute("aria-expanded", "false");
-  modPop?.classList.add("hidden");
-  modBtn?.setAttribute("aria-expanded", "false");
+  closeAccountPopover();
+  window.dispatchEvent(new CustomEvent("nh:close-popovers"));
 }
+
+window.addEventListener("nh:close-popovers", closeAccountPopover);
 
 accBtn?.addEventListener("click", (e) => {
   e.stopPropagation();
-  const willOpen = accPop.classList.contains("hidden");
+  const willOpen = !accPop.classList.contains("is-open");
   closePopovers();
   if (willOpen) {
-    accPop.classList.remove("hidden");
+    accPop.classList.add("is-open");
+    accPop.setAttribute("aria-hidden", "false");
     accBtn.setAttribute("aria-expanded", "true");
   }
 });
 
-modBtn?.addEventListener("click", (e) => {
-  e.stopPropagation();
-  const willOpen = modPop.classList.contains("hidden");
-  closePopovers();
-  if (willOpen) {
-    modPop.classList.remove("hidden");
-    modBtn.setAttribute("aria-expanded", "true");
-  }
-});
-
 accPop?.addEventListener("click", (e) => e.stopPropagation());
-modPop?.addEventListener("click", (e) => e.stopPropagation());
 document.addEventListener("click", closePopovers);
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closePopovers();
@@ -415,18 +417,22 @@ async function enterApp() {
 
   $$("[data-perm]").forEach((b) => b.classList.toggle("hidden", !state.user.perms[b.dataset.perm]));
   $$("[data-admin]").forEach((b) => b.classList.toggle("hidden", !isAdmin));
+  syncApiTabVisibility();
 
   // в режиме Claude скрываем панель режимов NeuroHub, если у гостя нет спец-доступов (картинки/звонок/зрение/стемы)
   const hasExtraModes = isAdmin || state.user.perms.image || state.user.perms.voice || state.user.perms.yolo || state.user.perms.stems;
   $("#modes-nav").classList.toggle("hidden", !hasExtraModes);
 
+  const activeModel = getSelectedModel();
   const initial = state.user.username.slice(0, 1).toUpperCase();
   $("#profile-name").textContent = state.user.username;
-  $("#profile-role").textContent = isAdmin ? "администратор" : "Claude Fable 8";
+  $("#profile-role").textContent = isAdmin ? "администратор" : activeModel.full_name;
   $("#avatar").textContent = initial;
   $("#profile-name-claude").textContent = state.user.username;
   $("#avatar-claude").textContent = initial;
   $("#pop-username").textContent = state.user.username;
+  const planSub = $("#pop-plan-sub");
+  if (planSub) planSub.textContent = `План Pro · ${activeModel.full_name}`;
   $("#hello-name").textContent = `, ${state.user.username}`;
   updateUsage(data.usage);
   updateLock(data.ai_locked);
@@ -492,22 +498,116 @@ window.addEventListener("nh:open-chat-mode", () => {
 });
 window.addEventListener("nh:appeals-updated", refreshAppealsBadge);
 
-// ---------------- квоты и статус ----------------
-function quotaFillClass(pct) {
-  if (pct >= 100) return "quota-fill full";
-  if (pct >= 80) return "quota-fill warn";
-  return "quota-fill";
+// ---------------- квоты (плавный 60fps слив во время генерации) и статус ----------------
+const quotaAnim = {
+  cur5h: null,
+  curWeek: null,
+  target5h: 0,
+  targetWeek: 0,
+  draining: false,
+  raf: 0,
+};
+
+function quotaFillClass(pct, base = "quota-fill") {
+  if (pct >= 100) return `${base} full`;
+  if (pct >= 80) return `${base} warn`;
+  return base;
+}
+
+function fmtPctText(val, live) {
+  const clamped = Math.max(0, Math.min(100, val));
+  if (live) return `${clamped.toFixed(1)}%`;
+  return `${Math.round(clamped)}%`;
+}
+
+function applyQuotaVisuals(p5, pw) {
+  const u = state.usage;
+  if (!u) return;
+  const live = quotaAnim.draining;
+  if (u.limit_5h != null) {
+    const r5 = u.reset_5h ? `сброс ${fmtReset(u.reset_5h, false)}` : "свободно";
+    $("#q-5h-label").textContent = `${fmtPctText(p5, live)} · ${r5}`;
+    const f5 = $("#q-5h-fill");
+    f5.className = quotaFillClass(p5);
+    f5.style.setProperty("--p", String(Math.min(1, p5 / 100)));
+  }
+  if (u.limit_week != null) {
+    const rw = u.reset_week ? `сброс ${fmtReset(u.reset_week, true)}` : "свободно";
+    $("#q-week-label").textContent = `${fmtPctText(pw, live)} · ${rw}`;
+    const fw = $("#q-week-fill");
+    fw.className = quotaFillClass(pw);
+    fw.style.setProperty("--p", String(Math.min(1, pw / 100)));
+  }
+  const pill = $("#topbar-quota");
+  if (pill && !pill.classList.contains("hidden")) {
+    const mainP = u.limit_5h != null ? p5 : pw;
+    const lqFill = $("#lq-fill");
+    lqFill.className = quotaFillClass(mainP, "lq-fill");
+    lqFill.style.setProperty("--p", String(Math.min(1, mainP / 100)));
+    $("#lq-label").textContent = fmtPctText(mainP, live);
+    pill.classList.toggle("warn", mainP >= 80 && mainP < 100);
+    pill.classList.toggle("full", mainP >= 100);
+  }
+  // обновляем полосы в открытых настройках на месте без перестройки DOM
+  const s5Fill = $("#settings-q-5h-fill");
+  if (s5Fill) {
+    s5Fill.className = quotaFillClass(p5);
+    s5Fill.style.setProperty("--p", String(Math.min(1, p5 / 100)));
+    const s5Lbl = $("#settings-q-5h-pct");
+    if (s5Lbl) s5Lbl.textContent = `${fmtPctText(p5, live)} использовано`;
+  }
+  const swFill = $("#settings-q-week-fill");
+  if (swFill) {
+    swFill.className = quotaFillClass(pw);
+    swFill.style.setProperty("--p", String(Math.min(1, pw / 100)));
+    const swLbl = $("#settings-q-week-pct");
+    if (swLbl) swLbl.textContent = `${fmtPctText(pw, live)} использовано`;
+  }
+}
+
+function stepQuotaAnim() {
+  quotaAnim.raf = 0;
+  const d5 = quotaAnim.target5h - quotaAnim.cur5h;
+  const dw = quotaAnim.targetWeek - quotaAnim.curWeek;
+  const settled = Math.abs(d5) < 0.025 && Math.abs(dw) < 0.025;
+  if (settled) {
+    quotaAnim.cur5h = quotaAnim.target5h;
+    quotaAnim.curWeek = quotaAnim.targetWeek;
+    applyQuotaVisuals(quotaAnim.cur5h, quotaAnim.curWeek);
+    return;
+  }
+  quotaAnim.cur5h += d5 * 0.14;
+  quotaAnim.curWeek += dw * 0.14;
+  applyQuotaVisuals(quotaAnim.cur5h, quotaAnim.curWeek);
+  quotaAnim.raf = requestAnimationFrame(stepQuotaAnim);
+}
+
+function setQuotaDraining(on) {
+  const next = Boolean(on);
+  if (quotaAnim.draining === next) return;
+  quotaAnim.draining = next;
+  $("#quota-box")?.classList.toggle("is-draining", next);
+  $("#topbar-quota")?.classList.toggle("is-draining", next);
+  $("#settings-usage-card")?.classList.toggle("is-draining", next);
+  if (state.usage && quotaAnim.cur5h !== null) {
+    applyQuotaVisuals(quotaAnim.cur5h, quotaAnim.curWeek);
+  }
 }
 
 function renderUsageSettingsCard(u) {
   const host = $("#settings-usage-card");
   if (!host) return;
+  host.classList.toggle("is-draining", quotaAnim.draining);
   if (state.user?.role === "admin" || !u || (u.limit_5h == null && u.limit_week == null)) {
     host.replaceChildren(el("p", { class: "hint", text: "Для этого аккаунта лимиты использования не ограничены." }));
     return;
   }
+  const p5 = u.pct_5h_exact ?? u.pct_5h ?? 0;
+  const pw = u.pct_week_exact ?? u.pct_week ?? 0;
   const rows = [];
   if (u.limit_5h != null) {
+    const fill = el("div", { id: "settings-q-5h-fill", class: quotaFillClass(p5) });
+    fill.style.setProperty("--p", String(Math.min(1, p5 / 100)));
     rows.push(
       el(
         "div",
@@ -516,13 +616,15 @@ function renderUsageSettingsCard(u) {
           "div",
           { class: "usage-item-head" },
           el("div", {}, el("strong", { text: "Текущая сессия" }), el("span", { class: "hint", text: u.reset_5h ? `Сбросится ${fmtReset(u.reset_5h, false)}` : "Окно 5 часов ещё не начато" })),
-          el("span", { class: "usage-pct", text: `${u.pct_5h}% использовано` })
+          el("span", { id: "settings-q-5h-pct", class: "usage-pct", text: `${fmtPctText(p5, quotaAnim.draining)} использовано` })
         ),
-        el("div", { class: "quota-track lg" }, el("div", { class: quotaFillClass(u.pct_5h), style: `width:${Math.min(100, u.pct_5h)}%` }))
+        el("div", { class: "quota-track lg" }, fill)
       )
     );
   }
   if (u.limit_week != null) {
+    const fill = el("div", { id: "settings-q-week-fill", class: quotaFillClass(pw) });
+    fill.style.setProperty("--p", String(Math.min(1, pw / 100)));
     rows.push(
       el(
         "div",
@@ -531,58 +633,66 @@ function renderUsageSettingsCard(u) {
           "div",
           { class: "usage-item-head" },
           el("div", {}, el("strong", { text: "Все модели (неделя)" }), el("span", { class: "hint", text: u.reset_week ? `Сбросится в ${fmtReset(u.reset_week, true)}` : "Недельное окно ещё не начато" })),
-          el("span", { class: "usage-pct", text: `${u.pct_week}% использовано` })
+          el("span", { id: "settings-q-week-pct", class: "usage-pct", text: `${fmtPctText(pw, quotaAnim.draining)} использовано` })
         ),
-        el("div", { class: "quota-track lg" }, el("div", { class: quotaFillClass(u.pct_week), style: `width:${Math.min(100, u.pct_week)}%` }))
+        el("div", { class: "quota-track lg" }, fill)
       )
     );
   }
   host.replaceChildren(...rows);
 }
 
-function updateUsage(u) {
+function updateUsage(u, { live = false } = {}) {
   state.usage = u;
-  renderUsageSettingsCard(u);
   const box = $("#quota-box");
+  const pill = $("#topbar-quota");
   const banner = $("#quota-banner");
   const isAdmin = state.user?.role === "admin";
   if (!u || isAdmin || (u.limit_5h == null && u.limit_week == null)) {
     box.classList.add("hidden");
+    pill?.classList.add("hidden");
     banner.classList.add("hidden");
+    renderUsageSettingsCard(u);
     return;
   }
 
   box.classList.remove("hidden");
+  pill?.classList.remove("hidden");
   const row5 = $("#quota-row-5h");
   const rowW = $("#quota-row-week");
   row5.classList.toggle("hidden", u.limit_5h == null);
   rowW.classList.toggle("hidden", u.limit_week == null);
 
-  if (u.limit_5h != null) {
-    const r5 = u.reset_5h ? `сброс ${fmtReset(u.reset_5h, false)}` : "свободно";
-    $("#q-5h-label").textContent = `${u.pct_5h}% · ${r5}`;
-    const f5 = $("#q-5h-fill");
-    f5.className = quotaFillClass(u.pct_5h);
-    f5.style.width = `${Math.min(100, u.pct_5h)}%`;
-  }
-  if (u.limit_week != null) {
-    const rw = u.reset_week ? `сброс ${fmtReset(u.reset_week, true)}` : "свободно";
-    $("#q-week-label").textContent = `${u.pct_week}% · ${rw}`;
-    const fw = $("#q-week-fill");
-    fw.className = quotaFillClass(u.pct_week);
-    fw.style.width = `${Math.min(100, u.pct_week)}%`;
+  if (live) setQuotaDraining(true);
+
+  const next5 = Number(u.pct_5h_exact ?? u.pct_5h ?? 0);
+  const nextW = Number(u.pct_week_exact ?? u.pct_week ?? 0);
+  quotaAnim.target5h = next5;
+  quotaAnim.targetWeek = nextW;
+  if (quotaAnim.cur5h === null) {
+    quotaAnim.cur5h = next5;
+    quotaAnim.curWeek = nextW;
+    renderUsageSettingsCard(u);
+    applyQuotaVisuals(next5, nextW);
+  } else {
+    if (!live) renderUsageSettingsCard(u);
+    if (!quotaAnim.raf) quotaAnim.raf = requestAnimationFrame(stepQuotaAnim);
   }
 
-  if (u.blocked_by === "week") {
-    banner.textContent = `Недельный лимит исчерпан. Доступ восстановится в ${fmtReset(u.reset_week, true)}.`;
-    banner.classList.remove("hidden");
-  } else if (u.blocked_by === "5h") {
-    banner.textContent = `Лимит на 5 часов исчерпан. Доступ восстановится ${fmtReset(u.reset_5h, false)}.`;
-    banner.classList.remove("hidden");
-  } else {
-    banner.classList.add("hidden");
+  if (!live) {
+    if (u.blocked_by === "week") {
+      banner.textContent = `Недельный лимит исчерпан. Доступ восстановится в ${fmtReset(u.reset_week, true)}.`;
+      banner.classList.remove("hidden");
+    } else if (u.blocked_by === "5h") {
+      banner.textContent = `Лимит на 5 часов исчерпан. Доступ восстановится ${fmtReset(u.reset_5h, false)}.`;
+      banner.classList.remove("hidden");
+    } else {
+      banner.classList.add("hidden");
+    }
   }
 }
+
+$("#topbar-quota")?.addEventListener("click", () => openSettings("usage"));
 
 function updateLock(locked, userDisabled = Boolean(state.user?.ai_disabled)) {
   state.aiLocked = locked;
@@ -623,6 +733,39 @@ function scheduleStatusPoll(isLoading) {
   }, isLoading ? 3500 : 15000);
 }
 
+function paintModelLabels() {
+  const s = state.status;
+  if (!s) return;
+  let key = s.llm_state;
+  if (s.llm_paused) key = s.llm_pause_reason === "demucs" ? "paused_demucs" : "paused";
+  else if (key === "offline" && s.llm_managed) key = "offline_managed";
+  const [cls, text] = STATE_TEXT[key] || STATE_TEXT.offline;
+  const isClaude = document.documentElement.dataset.brand === "claude";
+  // для гостей Claude спящий llama-server просыпается сам по первому запросу, не выдаём техническое "Модель спит"
+  const claudeCalm = isClaude && (key === "ready" || key === "offline_managed");
+  const effCls = claudeCalm ? "on" : cls;
+  const activeModel = getSelectedModel();
+  const modelLabel = isClaude ? activeModel.full_name : (s.model || "");
+  const pill = $("#model-pill");
+  // в режиме Claude прячем лишнюю статусную строку в сайдбаре, пока модель готова - как на claude.ai
+  pill.classList.toggle("hidden", claudeCalm);
+  pill.querySelector(".dot").className = `dot ${effCls}`;
+  pill.querySelector(".model-pill-text").textContent = claudeCalm ? activeModel.full_name : text;
+  pill.title = modelLabel;
+  const sub = $("#topbar-sub");
+  sub.querySelector(".dot").className = `dot ${effCls}`;
+  sub.querySelector("span").textContent = claudeCalm ? activeModel.full_name : text;
+  sub.title = modelLabel;
+  // в мобильном интерфейсе Claude прячем строку статуса, когда модель готова/спит по требованию - шапка остаётся чистой
+  sub.classList.toggle("is-quiet-mobile", claudeCalm);
+  const planSub = $("#pop-plan-sub");
+  if (planSub) planSub.textContent = `План Pro · ${activeModel.full_name}`;
+  if (state.user && state.user.role !== "admin") {
+    $("#profile-role").textContent = activeModel.full_name;
+  }
+  $("#input").placeholder = claudeCalm ? "Чем я могу помочь сегодня?" : (INPUT_HINT[key] || INPUT_HINT.ready);
+}
+
 async function refreshStatus() {
   let isLoading = false;
   try {
@@ -632,23 +775,13 @@ async function refreshStatus() {
     if (s.llm_paused) key = s.llm_pause_reason === "demucs" ? "paused_demucs" : "paused";
     else if (key === "offline" && s.llm_managed) key = "offline_managed";
     isLoading = key === "loading";
-    const [cls, text] = STATE_TEXT[key] || STATE_TEXT.offline;
-    const isClaude = document.documentElement.dataset.brand === "claude";
-    const modelLabel = isClaude ? "Claude Fable 8" : (s.model || "");
-    const pill = $("#model-pill");
-    pill.querySelector(".dot").className = `dot ${cls}`;
-    pill.querySelector(".model-pill-text").textContent = isClaude && key === "ready" ? "Claude Fable 8" : text;
-    pill.title = modelLabel;
-    const sub = $("#topbar-sub");
-    sub.querySelector(".dot").className = `dot ${cls}`;
-    sub.querySelector("span").textContent = isClaude && key === "ready" ? "Claude Fable 8" : text;
-    sub.title = modelLabel;
-    $("#input").placeholder = INPUT_HINT[key] || INPUT_HINT.ready;
+    paintModelLabels();
     updateLock(s.ai_locked, s.user_ai_disabled);
     window.dispatchEvent(new CustomEvent("nh:status", { detail: s }));
   } catch {}
   scheduleStatusPoll(isLoading);
 }
+window.addEventListener("nh:model-changed", paintModelLabels);
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden && state.user && state.user.ban_status === "active") refreshStatus();
 });
@@ -656,8 +789,114 @@ window.addEventListener("nh:refresh-status", refreshStatus);
 
 // ---------------- настройки с вкладками в стиле claude.ai ----------------
 const dlg = $("#settings-dialog");
+let apiKeyCache = null;
+
+function syncApiTabVisibility() {
+  const allowed = Boolean(state.user?.perms?.api);
+  const tab = $("#settings-tab-api");
+  if (tab) tab.classList.toggle("hidden", !allowed);
+  if (!allowed) {
+    apiKeyCache = null;
+    if ($('.settings-tab[data-tab="api"]')?.getAttribute("aria-selected") === "true") {
+      selectSettingsTab("general");
+    }
+  }
+}
+
+window.addEventListener("nh:self-perms-changed", (ev) => {
+  if (!state.user?.perms || !ev.detail) return;
+  Object.assign(state.user.perms, ev.detail);
+  syncApiTabVisibility();
+});
+
+function flashCopied(btn) {
+  if (!btn) return;
+  btn.classList.add("copied");
+  clearTimeout(btn._copyTimer);
+  btn._copyTimer = setTimeout(() => btn.classList.remove("copied"), 1400);
+}
+
+function renderApiSettings(data) {
+  apiKeyCache = data;
+  $("#api-base-url").value = data.base_url || "";
+  const httpHint = data.http_url && data.http_url !== data.base_url ? `HTTP (без TLS): ${data.http_url}` : "";
+  $("#api-alt-urls").textContent = httpHint;
+  const caBtn = $("#btn-download-ca");
+  const caHint = $("#api-ca-hint");
+  if (caBtn) {
+    caBtn.classList.toggle("hidden", !data.ca_url);
+    if (data.ca_url) caBtn.href = data.ca_url;
+  }
+  if (caHint) caHint.classList.toggle("hidden", !data.ca_url);
+  const keyIn = $("#api-key-input");
+  keyIn.type = "password";
+  keyIn.value = data.api_key || "";
+  const list = $("#api-models-list");
+  list.replaceChildren(
+    ...(data.models || []).map((id) => {
+      const chip = el("button", {
+        type: "button",
+        class: "api-model-chip",
+        text: id,
+        title: `Скопировать ${id}`,
+      });
+      chip.addEventListener("click", async () => {
+        if (await copyText(id, `Скопировано: ${id}`)) flashCopied(chip);
+      });
+      return chip;
+    })
+  );
+}
+
+async function loadApiKeyTab(force = false) {
+  if (!state.user?.perms?.api) return;
+  if (apiKeyCache && !force) return renderApiSettings(apiKeyCache);
+  $("#api-base-url").value = "Загружаю…";
+  try {
+    renderApiSettings(await api("/api/me/api-key"));
+  } catch (e) {
+    $("#api-base-url").value = "";
+    toast(e.message, true);
+  }
+}
+
+$("#btn-copy-api-url")?.addEventListener("click", async (e) => {
+  const v = $("#api-base-url").value.trim();
+  if (v && v !== "—" && (await copyText(v, "Base URL скопирован"))) flashCopied(e.currentTarget);
+});
+
+$("#btn-copy-api-key")?.addEventListener("click", async (e) => {
+  const v = $("#api-key-input").value.trim();
+  if (v && (await copyText(v, "API-ключ скопирован"))) flashCopied(e.currentTarget);
+});
+
+$("#btn-toggle-api-key")?.addEventListener("click", () => {
+  const inp = $("#api-key-input");
+  inp.type = inp.type === "password" ? "text" : "password";
+});
+
+$("#btn-rotate-api-key")?.addEventListener("click", async () => {
+  const ok = await ask({
+    title: "Перевыпустить API-ключ?",
+    text: "Старый ключ сразу перестанет работать. В приложениях на iPhone нужно будет вставить новый.",
+    ok: "Перевыпустить",
+    danger: true,
+  });
+  if (!ok) return;
+  const btn = $("#btn-rotate-api-key");
+  btn.disabled = true;
+  try {
+    renderApiSettings(await api("/api/me/api-key/rotate", { method: "POST" }));
+    toast("Новый API-ключ создан");
+  } catch (e) {
+    toast(e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 function selectSettingsTab(tab) {
+  if (tab === "api" && !state.user?.perms?.api) tab = "general";
   $$(".settings-tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
   $$(".settings-panel").forEach((p) => {
     const match = p.dataset.panel === tab;
@@ -668,6 +907,7 @@ function selectSettingsTab(tab) {
       p.classList.add("panel-enter");
     }
   });
+  if (tab === "api") loadApiKeyTab();
 }
 
 $$(".settings-tab").forEach((b) => {
@@ -676,6 +916,7 @@ $$(".settings-tab").forEach((b) => {
 
 function openSettings(tab = "general") {
   closePopovers();
+  syncApiTabVisibility();
   const f = $("#settings-form");
   f.about_me.value = state.user.about_me || "";
   f.instructions.value = state.user.instructions || "";
@@ -753,7 +994,7 @@ $("#settings-save").addEventListener("click", async (e) => {
 });
 
 // ---------------- старт ----------------
-initChat({ onUsage: updateUsage });
+initChat({ onUsage: updateUsage, onDraining: setQuotaDraining });
 initAdmin({ onLockChange: updateLock });
 initImage({ onUsage: updateUsage });
 initVoice({ onUsage: updateUsage });
